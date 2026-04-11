@@ -8,3 +8,4 @@ self.addEventListener("fetch", e => {
   if (new URL(e.request.url).hostname === "api.anthropic.com") { e.respondWith(fetch(e.request)); return; }
   e.respondWith(caches.match(e.request).then(c => c || fetch(e.request).then(r => { if (r.ok && e.request.method === "GET") { caches.open(CACHE_NAME).then(cache => cache.put(e.request, r.clone())); } return r; })).catch(() => e.request.mode === "navigate" ? caches.match("/index.html") : undefined));
 });
+ 
