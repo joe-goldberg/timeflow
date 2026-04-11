@@ -41,12 +41,12 @@
     .setup-input{width:100%;padding:12px 14px;background:#161B22;border:1px solid #30363D;border-radius:10px;color:#E6EDF3;font-size:14px;font-family:'Roboto',sans-serif;outline:none;transition:border-color .2s}
     .setup-input:focus{border-color:#3BA676}
     .setup-input::placeholder{color:#484F58}
-    .edit-input{padding:6px 8px;background:#0D1117;border:1px solid #30363D;border-radius:6px;color:#E6EDF3;font-size:12px;font-family:'Roboto',sans-serif;outline:none;width:70px;text-align:center}
+    .edit-input{padding:10px 12px;background:#0D1117;border:1px solid #30363D;border-radius:8px;color:#E6EDF3;font-size:15px;font-family:'Roboto',sans-serif;outline:none;width:100%;text-align:center;min-height:44px}
     .edit-input:focus{border-color:#4A9BD9}
-    .edit-panel{background:#161B22;border:1px solid #30363D;border-radius:12px;padding:14px;margin:6px 0 10px;animation:fadeIn .2s ease}
-    .edit-btn{padding:4px 8px;border:none;border-radius:6px;font-size:11px;font-weight:600;font-family:'Montserrat',sans-serif;cursor:pointer;transition:all .2s}
+    .edit-panel{background:#161B22;border:1px solid #30363D;border-radius:12px;padding:16px;margin:6px 0 10px;animation:fadeIn .2s ease}
+    .edit-btn{padding:8px 12px;border:none;border-radius:8px;font-size:12px;font-weight:600;font-family:'Montserrat',sans-serif;cursor:pointer;transition:all .2s}
     .edit-btn:active{transform:scale(.95)}
-    .cat-select{padding:6px 8px;background:#0D1117;border:1px solid #30363D;border-radius:6px;color:#E6EDF3;font-size:12px;font-family:'Roboto',sans-serif;outline:none;appearance:none;-webkit-appearance:none;cursor:pointer}
+    .cat-select{padding:10px 12px;background:#0D1117;border:1px solid #30363D;border-radius:8px;color:#E6EDF3;font-size:14px;font-family:'Roboto',sans-serif;outline:none;appearance:none;-webkit-appearance:none;cursor:pointer;min-height:44px}
     .cat-select:focus{border-color:#4A9BD9}
   </style>
 </head>
@@ -396,19 +396,19 @@
                 </div>
               </div>
               <div style="display:flex;gap:8px;margin-top:14px">
-                <button onclick="saveEdit()" class="edit-btn" style="flex:1;background:#3BA676;color:#fff">${t.saveEdit}</button>
-                <button onclick="cancelEdit()" class="edit-btn" style="flex:1;background:#21262D;color:#8B949E">${t.cancelEdit}</button>
-                <button onclick="deleteEntry()" class="edit-btn" style="background:#21262D;color:#F85149;padding:4px 12px">🗑</button>
+                <button onclick="saveEdit()" class="edit-btn" style="flex:1;background:#3BA676;color:#fff;padding:10px 12px;font-size:13px;min-height:44px">${t.saveEdit}</button>
+                <button onclick="cancelEdit()" class="edit-btn" style="flex:1;background:#21262D;color:#8B949E;padding:10px 12px;font-size:13px;min-height:44px">${t.cancelEdit}</button>
+                <button onclick="deleteEntry()" class="edit-btn" style="background:#21262D;color:#F85149;padding:10px 14px;font-size:16px;min-height:44px;min-width:44px;display:flex;align-items:center;justify-content:center">🗑</button>
               </div>
             </div>`;
           }
 
-          // Normal log row
-          return`<div class="log-row">
+          // Normal log row — full row tappable on mobile
+          return`<div class="log-row" style="position:relative">
             <div style="width:32px;height:32px;border-radius:8px;background:${cat.color}18;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">${cat.icon}</div>
-            <div style="flex:1"><div style="font-size:13px;font-weight:500;color:#C9D1D9;font-family:'Montserrat',sans-serif">${catLabel(cat.id)}</div><div style="font-size:11px;color:#8B949E">${fmtTime(l.start)} → ${fmtTime(l.end)}</div></div>
-            <div style="font-size:13px;font-weight:700;font-family:'Montserrat',sans-serif;color:${cat.color};margin-right:6px">${fmtDur(l.duration)}</div>
-            <button onclick="startEdit('${ds}',${origIdx})" class="edit-btn" style="background:#21262D;color:#8B949E;font-size:13px;padding:5px 8px" title="${t.editLog}">✏️</button>
+            <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;color:#C9D1D9;font-family:'Montserrat',sans-serif">${catLabel(cat.id)}</div><div style="font-size:11px;color:#8B949E">${fmtTime(l.start)} → ${fmtTime(l.end)}</div></div>
+            <div style="font-size:13px;font-weight:700;font-family:'Montserrat',sans-serif;color:${cat.color}">${fmtDur(l.duration)}</div>
+            <button onclick="startEdit('${ds}',${origIdx})" class="edit-btn" style="background:#21262D;color:#8B949E;font-size:16px;padding:8px 12px;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;border-radius:8px;flex-shrink:0" title="${t.editLog}">✏️</button>
           </div>`;
         }).reverse().join("")}
       </div>`;
