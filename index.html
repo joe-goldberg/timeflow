@@ -23,7 +23,6 @@
     @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
     @keyframes breathe{0%,100%{opacity:.92}50%{opacity:1}}
     @keyframes glow{0%,100%{box-shadow:0 0 8px rgba(59,166,118,.2)}50%{box-shadow:0 0 16px rgba(59,166,118,.4)}}
-    @keyframes typeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
     .fade-in{animation:fadeIn .3s ease}
     .slide-in{animation:slideIn .4s ease forwards,breathe 3s ease-in-out infinite}
     .shimmer{background:linear-gradient(90deg,#21262D 25%,#30363D 50%,#21262D 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px}
@@ -35,23 +34,26 @@
     .progress-bar{height:6px;background:#21262D;border-radius:3px;overflow:hidden}
     .progress-fill{height:100%;border-radius:3px;transition:width .5s ease}
     .log-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #161B22}
-    .ai-card{padding:14px 16px;border-radius:14px;font-size:13px;line-height:1.6;animation:typeIn .4s ease}
+    .ai-card{padding:14px 16px;border-radius:14px;font-size:13px;line-height:1.6}
     .ai-dot{width:6px;height:6px;border-radius:50%;animation:pulse 1.2s infinite}
     .insight-btn{width:100%;padding:14px;border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;font-family:'Montserrat',sans-serif;transition:all .3s;cursor:pointer}
     .insight-btn:not(:disabled):hover{filter:brightness(1.1);transform:scale(1.01)}
     .setup-input{width:100%;padding:12px 14px;background:#161B22;border:1px solid #30363D;border-radius:10px;color:#E6EDF3;font-size:14px;font-family:'Roboto',sans-serif;outline:none;transition:border-color .2s}
     .setup-input:focus{border-color:#3BA676}
     .setup-input::placeholder{color:#484F58}
+    .edit-input{padding:6px 8px;background:#0D1117;border:1px solid #30363D;border-radius:6px;color:#E6EDF3;font-size:12px;font-family:'Roboto',sans-serif;outline:none;width:70px;text-align:center}
+    .edit-input:focus{border-color:#4A9BD9}
+    .edit-panel{background:#161B22;border:1px solid #30363D;border-radius:12px;padding:14px;margin:6px 0 10px;animation:fadeIn .2s ease}
+    .edit-btn{padding:4px 8px;border:none;border-radius:6px;font-size:11px;font-weight:600;font-family:'Montserrat',sans-serif;cursor:pointer;transition:all .2s}
+    .edit-btn:active{transform:scale(.95)}
+    .cat-select{padding:6px 8px;background:#0D1117;border:1px solid #30363D;border-radius:6px;color:#E6EDF3;font-size:12px;font-family:'Roboto',sans-serif;outline:none;appearance:none;-webkit-appearance:none;cursor:pointer}
+    .cat-select:focus{border-color:#4A9BD9}
   </style>
 </head>
 <body>
   <div id="app"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script>
-  // ════════════════════════════════════════════════════════════
-  // TimeFlow PWA — Full AI Edition
-  // ════════════════════════════════════════════════════════════
-
   const CATEGORIES = [
     {id:"family",icon:"👨‍👩‍👧‍👦",color:"#E8A838",target:3},
     {id:"work",  icon:"💼", color:"#7C6FAF",target:8},
@@ -77,7 +79,10 @@
       apiKeyPlaceholder:"sk-ant-api03-...",save:"Save & Activate",skip:"Skip for now",
       changeKey:"Change API Key",aiActive:"AI Coach Active",aiOff:"AI Coach Off (no key)",
       proactiveTitle:"AI Suggestion",lastChecked:"Last analyzed",
-      refreshAI:"Refresh Analysis",autoTitle:"Auto-detected pattern shift",
+      autoTitle:"Auto-detected pattern shift",
+      editLog:"Edit",saveEdit:"Save",cancelEdit:"Cancel",deleteEntry:"Delete",
+      startTime:"Start",endTime:"End",category:"Category",
+      deleteConfirm:"Delete this entry?",
     },
     id:{
       family:"Keluarga/Anak",work:"Kerja",self:"Waktu Sendiri",partner:"Pasangan",friends:"Teman",sleep:"Tidur",
@@ -94,16 +99,18 @@
       apiKeyPlaceholder:"sk-ant-api03-...",save:"Simpan & Aktifkan",skip:"Lewati dulu",
       changeKey:"Ganti API Key",aiActive:"AI Coach Aktif",aiOff:"AI Coach Mati (tanpa key)",
       proactiveTitle:"Saran AI",lastChecked:"Terakhir dianalisis",
-      refreshAI:"Segarkan Analisis",autoTitle:"Perubahan pola terdeteksi",
+      autoTitle:"Perubahan pola terdeteksi",
+      editLog:"Edit",saveEdit:"Simpan",cancelEdit:"Batal",deleteEntry:"Hapus",
+      startTime:"Mulai",endTime:"Selesai",category:"Kategori",
+      deleteConfirm:"Hapus catatan ini?",
     }
   };
 
-  const STORAGE_KEY="timeflow-v4";
+  const STORAGE_KEY="timeflow-v5";
   const NUDGE_MS=120*60*1000;
-  const AI_COOLDOWN_MS=30*60*1000; // Min 30 min between auto AI calls
-  const PATTERN_CHECK_INTERVAL=60*1000; // Check patterns every 60s
+  const AI_COOLDOWN_MS=30*60*1000;
+  const PATTERN_CHECK_INTERVAL=60*1000;
 
-  // ─── State ───
   let state=loadState();
   let currentView="tracker";
   let insightLoading=false;
@@ -115,205 +122,135 @@
   let aiSuggestion=state.aiSuggestion||null;
   let aiSuggestionTime=state.aiSuggestionTime||null;
   let patternShiftDetected=false;
+  let editingEntry=null; // {dateStr, index}
 
   function loadState(){try{const r=localStorage.getItem(STORAGE_KEY);if(r)return JSON.parse(r)}catch{}return{days:{},activeSession:null,lang:"en",apiKey:"",aiSuggestion:null,aiSuggestionTime:null,lastPatternSnapshot:null}}
   function saveState(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}catch{}}
 
-  // ─── Helpers ───
   const getToday=()=>new Date().toISOString().slice(0,10);
-  const T=()=>LABELS[state.lang||"en"];
-  const catLabel=id=>T()[id]||id;
+  const TT=()=>LABELS[state.lang||"en"];
+  const catLabel=id=>TT()[id]||id;
   function fmtDur(s){if(!s||s<0)return"0m";const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`}
   function fmtTime(ts){return new Date(ts).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+  function fmtTimeInput(ts){const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
   function getDayName(ds){return new Date(ds+"T12:00:00").toLocaleDateString(state.lang==="id"?"id-ID":"en",{weekday:"short"})}
   function getLast7(){const d=[];for(let i=6;i>=0;i--){const x=new Date;x.setDate(x.getDate()-i);d.push(x.toISOString().slice(0,10))}return d}
-  function fmtTimeAgo(ts){
-    if(!ts)return"";
-    const diff=Math.floor((Date.now()-ts)/60000);
-    if(diff<1)return state.lang==="id"?"baru saja":"just now";
-    if(diff<60)return `${diff}m ${state.lang==="id"?"lalu":"ago"}`;
-    const h=Math.floor(diff/60);
-    return `${h}h ${state.lang==="id"?"lalu":"ago"}`;
-  }
+  function fmtTimeAgo(ts){if(!ts)return"";const diff=Math.floor((Date.now()-ts)/60000);if(diff<1)return state.lang==="id"?"baru saja":"just now";if(diff<60)return`${diff}m ${state.lang==="id"?"lalu":"ago"}`;return`${Math.floor(diff/60)}h ${state.lang==="id"?"lalu":"ago"}`}
 
   function getTotals(dateStr){
     const tot={};CATEGORIES.forEach(c=>tot[c.id]=0);
     (state.days?.[dateStr]||[]).forEach(l=>{tot[l.category]=(tot[l.category]||0)+l.duration});
-    if(state.activeSession){
-      const sd=new Date(state.activeSession.start).toISOString().slice(0,10);
-      if(sd===dateStr)tot[state.activeSession.category]=(tot[state.activeSession.category]||0)+(Date.now()-state.activeSession.start)/1000;
-    }
+    if(state.activeSession){const sd=new Date(state.activeSession.start).toISOString().slice(0,10);if(sd===dateStr)tot[state.activeSession.category]=(tot[state.activeSession.category]||0)+(Date.now()-state.activeSession.start)/1000}
     return tot;
   }
 
-  // ════════════════════════════════════════
-  // PATTERN SHIFT DETECTION ENGINE
-  // ════════════════════════════════════════
+  // ─── Pattern Shift Detection ───
   function computePatternSnapshot(){
     const today=getToday(),tot=getTotals(today);
-    // Create a hash of current significant patterns
-    const workH=Math.round(tot.work/1800)/2; // round to 0.5h
-    const famH=Math.round(tot.family/1800)/2;
-    const sleepH=Math.round(tot.sleep/1800)/2;
-    const selfH=Math.round(tot.self/1800)/2;
-    const partnerH=Math.round(tot.partner/1800)/2;
-    const hour=new Date().getHours();
-    const totalH=Object.values(tot).reduce((a,b)=>a+b,0)/3600;
-
-    // Detect significant conditions
+    const workH=Math.round(tot.work/1800)/2,famH=Math.round(tot.family/1800)/2,sleepH=Math.round(tot.sleep/1800)/2,selfH=Math.round(tot.self/1800)/2,partnerH=Math.round(tot.partner/1800)/2;
+    const hour=new Date().getHours(),totalH=Object.values(tot).reduce((a,b)=>a+b,0)/3600;
     const flags=[];
-    if(workH>9)flags.push("OVERWORK_EXTREME");
-    else if(workH>7)flags.push("OVERWORK");
+    if(workH>9)flags.push("OVERWORK_EXTREME");else if(workH>7)flags.push("OVERWORK");
     if(workH>5&&famH<0.5)flags.push("LOW_FAMILY");
     if(sleepH<5&&hour>=21)flags.push("SLEEP_DEFICIT");
     if(selfH<0.25&&workH>4)flags.push("NO_METIME");
     if(partnerH<0.25&&hour>=20)flags.push("NO_PARTNER");
     if(workH>6&&hour>=18)flags.push("LATE_WORK");
-    if(workH>=3&&workH<=4&&famH>=1)flags.push("GOOD_BALANCE");
-    if(sleepH>=7&&sleepH<=9)flags.push("GOOD_SLEEP");
     if(totalH<1)flags.push("MINIMAL_DATA");
-
-    return {workH,famH,sleepH,selfH,partnerH,hour,totalH,flags:flags.sort().join(",")};
+    return{workH,famH,sleepH,selfH,partnerH,hour,totalH,flags:flags.sort().join(",")};
   }
-
   function hasPatternShifted(){
-    const snap=computePatternSnapshot();
-    const newHash=snap.flags+"|"+snap.workH+"|"+snap.famH;
-
-    // Compare with last snapshot
-    if(!state.lastPatternSnapshot) return snap.totalH>=1; // first time, trigger if enough data
-    const oldFlags=state.lastPatternSnapshot.flags||"";
-    const shifted=newHash!==lastPatternHash&&snap.flags!==oldFlags&&snap.totalH>=1;
-    lastPatternHash=newHash;
-    return shifted;
+    const snap=computePatternSnapshot();const newHash=snap.flags+"|"+snap.workH+"|"+snap.famH;
+    if(!state.lastPatternSnapshot)return snap.totalH>=1;
+    const shifted=newHash!==lastPatternHash&&snap.flags!==(state.lastPatternSnapshot.flags||"")&&snap.totalH>=1;
+    lastPatternHash=newHash;return shifted;
   }
-
   function shouldAutoTriggerAI(){
-    if(!state.apiKey)return false;
-    if(insightLoading)return false;
-    // Cooldown check
+    if(!state.apiKey||insightLoading)return false;
     if(aiSuggestionTime&&(Date.now()-aiSuggestionTime)<AI_COOLDOWN_MS)return false;
-    // Must have meaningful data
     const today=getToday(),tot=getTotals(today);
-    const totalH=Object.values(tot).reduce((a,b)=>a+b,0)/3600;
-    if(totalH<1)return false;
+    if(Object.values(tot).reduce((a,b)=>a+b,0)/3600<1)return false;
     return hasPatternShifted();
   }
 
   async function callAI(trigger="manual"){
     if(!state.apiKey){showSetup=true;render();return}
     insightLoading=true;render();
-
-    const today=getToday(),days7=getLast7();
-    const todayTot=getTotals(today);
-    const snap=computePatternSnapshot();
-
+    const today=getToday(),days7=getLast7(),todayTot=getTotals(today),snap=computePatternSnapshot();
     const todayStr=CATEGORIES.map(c=>`${c.id}: ${((todayTot[c.id]||0)/3600).toFixed(1)}h (target ${c.target}h)`).join("\n");
     const weekStr=days7.map(d=>{const tot=getTotals(d);return`${d}: ${CATEGORIES.map(c=>`${c.id}=${((tot[c.id]||0)/3600).toFixed(1)}h`).join(", ")}`}).join("\n");
-
-    const triggerContext=trigger==="auto"
-      ?(state.lang==="id"
-        ?`\n\nINI ADALAH ALERT OTOMATIS karena terdeteksi perubahan pola: ${snap.flags.replace(/,/g,", ")}. Jam sekarang: ${snap.hour}:00. Beri saran yang URGENT dan spesifik untuk situasi saat ini.`
-        :`\n\nTHIS IS AN AUTO-ALERT triggered by pattern shift: ${snap.flags.replace(/,/g,", ")}. Current time: ${snap.hour}:00. Give URGENT, specific advice for this moment.`)
-      :"";
-
+    const trigCtx=trigger==="auto"?(state.lang==="id"?`\n\nALERT OTOMATIS: perubahan pola terdeteksi: ${snap.flags.replace(/,/g,", ")}. Jam: ${snap.hour}:00. Beri saran URGENT.`:`\n\nAUTO-ALERT: pattern shift: ${snap.flags.replace(/,/g,", ")}. Time: ${snap.hour}:00. Give URGENT advice.`):"";
     const isID=state.lang==="id";
     const prompt=isID
-      ?`Kamu adalah AI life coach personal di app time tracker. Kamu menganalisis data realtime pengguna (Senior Data Analyst, punya anak kecil di Tallinn, Estonia).
-
-ATURAN PENTING:
-- Maksimal 3 poin saran, singkat dan actionable
-- Pakai emoji di awal setiap poin
-- Bahasa Indonesia santai tapi bermakna
-- Sebutkan angka spesifik dari data
-- Kalau ada yang perlu diperbaiki, langsung bilang tanpa basa-basi
-- Jangan pakai heading/markdown, tulis plain text saja
-- Maksimal 120 kata total
-
-DATA HARI INI (${today}, jam ${snap.hour}:00):
-${todayStr}
-
-DATA 7 HARI:
-${weekStr}
-
-Detected patterns: ${snap.flags||"none"}${triggerContext}`
-      :`You are a personal AI life coach in a time tracker app. You analyze realtime data of the user (Senior Data Analyst, young kids, Tallinn Estonia).
-
-RULES:
-- Max 3 points, short and actionable
-- Start each with an emoji
-- Warm but direct tone
-- Reference specific numbers from data
-- If something needs fixing, say it plainly
-- No headings/markdown, plain text only
-- Max 120 words total
-
-TODAY's DATA (${today}, ${snap.hour}:00):
-${todayStr}
-
-7-DAY DATA:
-${weekStr}
-
-Detected patterns: ${snap.flags||"none"}${triggerContext}`;
-
+      ?`Kamu AI life coach personal. Analisis data tracking waktu pengguna (punya anak kecil). Max 3 poin, singkat, actionable, pakai emoji. Bahasa Indonesia santai. Max 120 kata. Tanpa heading markdown.\n\nHARI INI (${today}, jam ${snap.hour}:00):\n${todayStr}\n\n7 HARI:\n${weekStr}\n\nPola: ${snap.flags||"none"}${trigCtx}`
+      :`You're a personal AI life coach. Analyze time tracking data (user has young kids). Max 3 points, short, actionable, use emoji. Warm tone. Max 120 words. No markdown headings.\n\nTODAY (${today}, ${snap.hour}:00):\n${todayStr}\n\n7 DAYS:\n${weekStr}\n\nPatterns: ${snap.flags||"none"}${trigCtx}`;
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
-        headers:{"Content-Type":"application/json","x-api-key":state.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:500,messages:[{role:"user",content:prompt}]})
-      });
-
-      if(!res.ok){
-        const err=await res.json().catch(()=>({}));
-        if(res.status===401){
-          aiSuggestion=isID?"❌ API key tidak valid. Silakan ganti di tab AI.":"❌ Invalid API key. Please update in AI tab.";
-        } else {
-          aiSuggestion=isID?`❌ Error: ${err.error?.message||res.status}`:`❌ Error: ${err.error?.message||res.status}`;
-        }
-      } else {
-        const data=await res.json();
-        aiSuggestion=data.content?.map(b=>b.text||"").join("")||(isID?"Tidak ada respons.":"No response.");
-      }
-    }catch(e){
-      aiSuggestion=isID?"❌ Gagal menghubungi AI. Periksa koneksi internet.":"❌ Failed to reach AI. Check your internet connection.";
-    }
-
-    aiSuggestionTime=Date.now();
-    state.aiSuggestion=aiSuggestion;
-    state.aiSuggestionTime=aiSuggestionTime;
-    state.lastPatternSnapshot=computePatternSnapshot();
-    insightLoading=false;
-    patternShiftDetected=(trigger==="auto");
-    saveState();render();
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":state.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:500,messages:[{role:"user",content:prompt}]})});
+      if(!res.ok){const err=await res.json().catch(()=>({}));aiSuggestion=res.status===401?(isID?"❌ API key tidak valid.":"❌ Invalid API key."):`❌ Error: ${err.error?.message||res.status}`}
+      else{const data=await res.json();aiSuggestion=data.content?.map(b=>b.text||"").join("")||(isID?"Tidak ada respons.":"No response.")}
+    }catch{aiSuggestion=isID?"❌ Gagal menghubungi AI.":"❌ Failed to reach AI."}
+    aiSuggestionTime=Date.now();state.aiSuggestion=aiSuggestion;state.aiSuggestionTime=aiSuggestionTime;state.lastPatternSnapshot=computePatternSnapshot();
+    insightLoading=false;patternShiftDetected=(trigger==="auto");saveState();render();
   }
 
   // ─── Actions ───
   function tapCategory(catId){
     const now=Date.now();
-    if(state.activeSession){
-      const sd=new Date(state.activeSession.start).toISOString().slice(0,10);
-      const dur=(now-state.activeSession.start)/1000;
-      if(!state.days[sd])state.days[sd]=[];
-      state.days[sd].push({category:state.activeSession.category,start:state.activeSession.start,end:now,duration:dur});
-    }
+    if(state.activeSession){const sd=new Date(state.activeSession.start).toISOString().slice(0,10);const dur=(now-state.activeSession.start)/1000;if(!state.days[sd])state.days[sd]=[];state.days[sd].push({category:state.activeSession.category,start:state.activeSession.start,end:now,duration:dur})}
     state.activeSession=(state.activeSession?.category===catId)?null:{category:catId,start:now};
     saveState();render();
   }
   function toggleLang(){state.lang=state.lang==="en"?"id":"en";saveState();render()}
-  function clearData(){if(confirm(T().clearConfirm)){const l=state.lang,k=state.apiKey;state={days:{},activeSession:null,lang:l,apiKey:k,aiSuggestion:null,aiSuggestionTime:null,lastPatternSnapshot:null};aiSuggestion=null;aiSuggestionTime=null;saveState();render()}}
-  function switchView(v){currentView=v;render()}
-  function saveApiKey(){
-    const inp=document.getElementById("apiKeyInput");
-    if(inp)tempApiKey=inp.value.trim();
-    if(tempApiKey){state.apiKey=tempApiKey;saveState();showSetup=false;tempApiKey="";render();setTimeout(()=>callAI("manual"),300)}
-  }
+  function clearData(){if(confirm(TT().clearConfirm)){const l=state.lang,k=state.apiKey;state={days:{},activeSession:null,lang:l,apiKey:k,aiSuggestion:null,aiSuggestionTime:null,lastPatternSnapshot:null};aiSuggestion=null;aiSuggestionTime=null;saveState();render()}}
+  function switchView(v){currentView=v;editingEntry=null;render()}
+  function saveApiKey(){const inp=document.getElementById("apiKeyInput");if(inp)tempApiKey=inp.value.trim();if(tempApiKey){state.apiKey=tempApiKey;saveState();showSetup=false;tempApiKey="";render();setTimeout(()=>callAI("manual"),300)}}
   function clearApiKey(){state.apiKey="";saveState();showSetup=true;render()}
   function skipSetup(){showSetup=false;render()}
   function showSetupScreen(){showSetup=true;render()}
 
+  // ─── Edit Log Functions ───
+  function startEdit(dateStr,index){editingEntry={dateStr,index};render()}
+  function cancelEdit(){editingEntry=null;render()}
+
+  function saveEdit(){
+    if(!editingEntry)return;
+    const{dateStr,index}=editingEntry;
+    const logs=state.days[dateStr];if(!logs||!logs[index])return;
+
+    const startInp=document.getElementById("edit-start");
+    const endInp=document.getElementById("edit-end");
+    const catSel=document.getElementById("edit-category");
+    if(!startInp||!endInp||!catSel)return;
+
+    const origLog=logs[index];
+    const origDate=new Date(origLog.start);
+    const datePrefix=origDate.toISOString().slice(0,10);
+
+    const[sh,sm]=startInp.value.split(":").map(Number);
+    const[eh,em]=endInp.value.split(":").map(Number);
+
+    const newStart=new Date(datePrefix+"T"+String(sh).padStart(2,'0')+":"+String(sm).padStart(2,'0')+":00");
+    const newEnd=new Date(datePrefix+"T"+String(eh).padStart(2,'0')+":"+String(em).padStart(2,'0')+":00");
+
+    if(isNaN(newStart.getTime())||isNaN(newEnd.getTime())||newEnd<=newStart)return;
+
+    const durSec=(newEnd-newStart)/1000;
+    logs[index]={category:catSel.value,start:newStart.getTime(),end:newEnd.getTime(),duration:durSec};
+    state.days[dateStr]=logs;
+    editingEntry=null;
+    saveState();render();
+  }
+
+  function deleteEntry(){
+    if(!editingEntry)return;
+    if(!confirm(TT().deleteConfirm))return;
+    const{dateStr,index}=editingEntry;
+    if(state.days[dateStr]){state.days[dateStr].splice(index,1);if(state.days[dateStr].length===0)delete state.days[dateStr]}
+    editingEntry=null;saveState();render();
+  }
+
   function getRuleAlerts(){
-    const today=getToday(),tot=getTotals(today);
-    const totalT=Object.values(tot).reduce((a,b)=>a+b,0);
+    const today=getToday(),tot=getTotals(today);const totalT=Object.values(tot).reduce((a,b)=>a+b,0);
     if(totalT<1800)return[];
     const wH=tot.work/3600,sH=tot.sleep/3600,fH=tot.family/3600,meH=tot.self/3600,pH=tot.partner/3600;
     const hr=new Date().getHours();const a=[];const L=state.lang;
@@ -335,41 +272,25 @@ Detected patterns: ${snap.flags||"none"}${triggerContext}`;
     return a.slice(0,2);
   }
 
-  // ═══════════════════════════════
-  // RENDER
-  // ═══════════════════════════════
+  // ═══ RENDER ═══
   function render(){
     const app=document.getElementById("app");
     const today=getToday();const totals=getTotals(today);
     const totalSec=Object.values(totals).reduce((a,b)=>a+b,0);
-    const t=T();const alerts=getRuleAlerts();
+    const t=TT();const alerts=getRuleAlerts();const hasKey=!!state.apiKey;
     const dateStr=new Date().toLocaleDateString(state.lang==="id"?"id-ID":"en",{weekday:"long",month:"short",day:"numeric"});
-    const hasKey=!!state.apiKey;
 
     let nudgeHTML="";
-    if(state.activeSession){
-      const elapsed=Date.now()-state.activeSession.start;
-      if(elapsed>NUDGE_MS)nudgeHTML=`<div style="margin:8px 20px 0;padding:10px 14px;background:linear-gradient(135deg,#E8A83812,#E0637C08);border:1px solid #E8A83830;border-radius:12px;font-size:13px;color:#E8A838;animation:pulse 2s infinite">${t.nudgePrefix} "${catLabel(state.activeSession.category)}" ${fmtDur(elapsed/1000)}. ${t.nudgeSuffix}</div>`;
-    }
+    if(state.activeSession){const elapsed=Date.now()-state.activeSession.start;if(elapsed>NUDGE_MS)nudgeHTML=`<div style="margin:8px 20px 0;padding:10px 14px;background:linear-gradient(135deg,#E8A83812,#E0637C08);border:1px solid #E8A83830;border-radius:12px;font-size:13px;color:#E8A838;animation:pulse 2s infinite">${t.nudgePrefix} "${catLabel(state.activeSession.category)}" ${fmtDur(elapsed/1000)}. ${t.nudgeSuffix}</div>`}
 
     let alertsHTML="";
     if(alerts.length>0)alertsHTML=`<div style="padding:8px 20px 0;display:flex;flex-direction:column;gap:6px">${alerts.map(a=>`<div class="slide-in" style="padding:8px 12px;background:linear-gradient(135deg,${a.color}12,${a.color}06);border:1px solid ${a.color}33;border-radius:10px;font-size:12px;color:${a.color};display:flex;align-items:center;gap:8px"><span style="font-size:16px">${a.icon}</span><span style="line-height:1.4">${a.msg}</span></div>`).join("")}</div>`;
 
-    // AI proactive suggestion banner (shown on all views when available and recent)
     let aiBannerHTML="";
     if(aiSuggestion&&aiSuggestionTime&&!insightLoading&&currentView!=="insights"){
       const age=(Date.now()-aiSuggestionTime)/60000;
-      if(age<120){ // show for up to 2h
-        const preview=aiSuggestion.slice(0,120)+(aiSuggestion.length>120?"...":"");
-        aiBannerHTML=`<div onclick="switchView('insights')" style="margin:8px 20px 0;padding:10px 14px;background:linear-gradient(135deg,#3BA67612,#4A9BD912);border:1px solid #3BA67633;border-radius:12px;cursor:pointer;animation:${patternShiftDetected?'glow 2s infinite':'fadeIn .4s'}">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <div class="ai-dot" style="background:#3BA676"></div>
-            <span style="font-size:11px;font-weight:700;color:#3BA676;font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px">${patternShiftDetected?t.autoTitle:t.proactiveTitle}</span>
-            <span style="font-size:10px;color:#8B949E;margin-left:auto">${fmtTimeAgo(aiSuggestionTime)}</span>
-          </div>
-          <div style="font-size:12px;color:#C9D1D9;line-height:1.4">${preview}</div>
-        </div>`;
-      }
+      if(age<120){const preview=aiSuggestion.slice(0,120)+(aiSuggestion.length>120?"...":"");
+        aiBannerHTML=`<div onclick="switchView('insights')" style="margin:8px 20px 0;padding:10px 14px;background:linear-gradient(135deg,#3BA67612,#4A9BD912);border:1px solid #3BA67633;border-radius:12px;cursor:pointer;animation:${patternShiftDetected?'glow 2s infinite':'fadeIn .4s'}"><div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><div class="ai-dot" style="background:#3BA676"></div><span style="font-size:11px;font-weight:700;color:#3BA676;font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:.5px">${patternShiftDetected?t.autoTitle:t.proactiveTitle}</span><span style="font-size:10px;color:#8B949E;margin-left:auto">${fmtTimeAgo(aiSuggestionTime)}</span></div><div style="font-size:12px;color:#C9D1D9;line-height:1.4">${preview}</div></div>`}
     }
 
     let viewHTML="";
@@ -383,23 +304,13 @@ Detected patterns: ${snap.flags||"none"}${triggerContext}`;
     app.innerHTML=`
       <div style="padding:16px 20px 10px;background:linear-gradient(180deg,#161B22,#0D1117);border-bottom:1px solid #21262D">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div>
-            <h1 style="margin:0;font-size:22px;font-weight:800;font-family:'Montserrat',sans-serif;letter-spacing:-.5px;background:linear-gradient(135deg,#3BA676,#4A9BD9);-webkit-background-clip:text;-webkit-text-fill-color:transparent">⏱ TimeFlow</h1>
-            <p style="margin:2px 0 0;font-size:11px;color:#8B949E">${dateStr}</p>
-          </div>
+          <div><h1 style="margin:0;font-size:22px;font-weight:800;font-family:'Montserrat',sans-serif;letter-spacing:-.5px;background:linear-gradient(135deg,#3BA676,#4A9BD9);-webkit-background-clip:text;-webkit-text-fill-color:transparent">⏱ TimeFlow</h1><p style="margin:2px 0 0;font-size:11px;color:#8B949E">${dateStr}</p></div>
           <div style="display:flex;align-items:center;gap:10px">
             <button onclick="toggleLang()" class="hdr-btn" style="padding:4px 9px;border-radius:20px;border:1px solid #30363D;background:#161B22;color:#C9D1D9;font-size:11px;font-weight:600;font-family:'Montserrat',sans-serif">${state.lang==="en"?"🇮🇩 ID":"🇬🇧 EN"}</button>
-            <div style="text-align:right">
-              <div style="font-size:18px;font-weight:700;font-family:'Montserrat',sans-serif">${fmtDur(totalSec)}</div>
-              <div style="font-size:9px;color:#8B949E;text-transform:uppercase;letter-spacing:1px">${t.trackedToday}</div>
-            </div>
+            <div style="text-align:right"><div style="font-size:18px;font-weight:700;font-family:'Montserrat',sans-serif">${fmtDur(totalSec)}</div><div style="font-size:9px;color:#8B949E;text-transform:uppercase;letter-spacing:1px">${t.trackedToday}</div></div>
           </div>
         </div>
-        <div class="tab-bar">
-          ${[{id:"tracker",icon:"⏱",label:t.track},{id:"daily",icon:"📊",label:t.today},{id:"weekly",icon:"📈",label:t.week},{id:"log",icon:"📋",label:t.log},{id:"insights",icon:"🤖",label:t.insights}].map(tab=>
-            `<button onclick="switchView('${tab.id}')" class="tab-btn ${currentView===tab.id?'active':''}"><span style="font-size:14px">${tab.icon}</span><br>${tab.label}${tab.id==="insights"&&hasKey?'<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#3BA676;margin-left:3px;vertical-align:top"></span>':''}</button>`
-          ).join("")}
-        </div>
+        <div class="tab-bar">${[{id:"tracker",icon:"⏱",label:t.track},{id:"daily",icon:"📊",label:t.today},{id:"weekly",icon:"📈",label:t.week},{id:"log",icon:"📋",label:t.log},{id:"insights",icon:"🤖",label:t.insights}].map(tab=>`<button onclick="switchView('${tab.id}')" class="tab-btn ${currentView===tab.id?'active':''}"><span style="font-size:14px">${tab.icon}</span><br>${tab.label}${tab.id==="insights"&&hasKey?'<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#3BA676;margin-left:3px;vertical-align:top"></span>':''}</button>`).join("")}</div>
       </div>
       ${alertsHTML}${nudgeHTML}${aiBannerHTML}
       <div style="padding:14px 20px 100px">${viewHTML}</div>`;
@@ -411,62 +322,36 @@ Detected patterns: ${snap.flags||"none"}${triggerContext}`;
   }
 
   function renderSetup(t){
-    return`<div class="fade-in" style="padding-top:20px">
-      <div style="text-align:center;margin-bottom:24px"><div style="font-size:48px;margin-bottom:8px">🤖</div>
-        <h2 style="font-size:18px;font-weight:700;font-family:'Montserrat',sans-serif;margin-bottom:6px">${t.setupTitle}</h2>
-        <p style="font-size:13px;color:#8B949E;line-height:1.5">${t.setupDesc}</p>
-      </div>
+    return`<div class="fade-in" style="padding-top:20px"><div style="text-align:center;margin-bottom:24px"><div style="font-size:48px;margin-bottom:8px">🤖</div><h2 style="font-size:18px;font-weight:700;font-family:'Montserrat',sans-serif;margin-bottom:6px">${t.setupTitle}</h2><p style="font-size:13px;color:#8B949E;line-height:1.5">${t.setupDesc}</p></div>
       <input id="apiKeyInput" type="password" class="setup-input" placeholder="${t.apiKeyPlaceholder}" value="${tempApiKey}" style="margin-bottom:12px">
       <button onclick="saveApiKey()" class="insight-btn" style="background:linear-gradient(135deg,#3BA676,#4A9BD9);margin-bottom:8px">${t.save}</button>
       <button onclick="skipSetup()" style="width:100%;padding:12px;border:none;border-radius:10px;background:#21262D;color:#8B949E;font-size:13px;font-family:'Montserrat',sans-serif;font-weight:600;cursor:pointer">${t.skip}</button>
-      <div style="margin-top:20px;padding:14px;background:#161B22;border-radius:12px;border:1px solid #21262D">
-        <p style="font-size:12px;color:#8B949E;line-height:1.6">
-          ${state.lang==="id"
-            ?"<strong style='color:#C9D1D9'>Cara dapat API key:</strong><br>1. Buka <strong>console.anthropic.com</strong><br>2. Buat account / login<br>3. Pergi ke Settings → API Keys<br>4. Create key, copy, paste di sini<br><br>💰 Cost: ~$0.003 per analisis (sangat murah)"
-            :"<strong style='color:#C9D1D9'>How to get an API key:</strong><br>1. Go to <strong>console.anthropic.com</strong><br>2. Create account / login<br>3. Go to Settings → API Keys<br>4. Create key, copy, paste here<br><br>💰 Cost: ~$0.003 per analysis (very cheap)"}
-        </p>
-      </div>
-    </div>`;
+      <div style="margin-top:20px;padding:14px;background:#161B22;border-radius:12px;border:1px solid #21262D"><p style="font-size:12px;color:#8B949E;line-height:1.6;margin:0">${state.lang==="id"?"<strong style='color:#C9D1D9'>Cara dapat API key:</strong><br>1. Buka console.anthropic.com<br>2. Login<br>3. Settings → API Keys<br>4. Create key, copy, paste<br><br>💰 ~$0.003/analisis":"<strong style='color:#C9D1D9'>How to get an API key:</strong><br>1. Go to console.anthropic.com<br>2. Login<br>3. Settings → API Keys<br>4. Create key, copy, paste<br><br>💰 ~$0.003/analysis"}</p></div></div>`;
   }
 
   function renderTracker(totals,t){
-    return`<div class="fade-in">
-      <p style="font-size:12px;color:#8B949E;margin:0 0 14px">${t.tapStart}</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        ${CATEGORIES.map(c=>{
-          const isA=state.activeSession?.category===c.id;
-          const secs=totals[c.id]||0;
-          const pct=c.target>0?Math.min(100,(secs/3600/c.target)*100):0;
-          return`<button onclick="tapCategory('${c.id}')" class="cat-btn" style="position:relative;overflow:hidden;padding:16px 14px;border-radius:14px;background:${isA?`linear-gradient(145deg,${c.color}18,${c.color}06)`:'#161B22'};border:2px solid ${isA?c.color:'#21262D'};${isA?'animation:ripple 2s infinite':''}">
-            <div style="position:absolute;bottom:0;left:0;height:3px;width:${pct}%;background:${c.color};border-radius:0 3px 3px 0;transition:width 1s;opacity:.7"></div>
-            <div style="font-size:26px;margin-bottom:6px">${c.icon}</div>
-            <div style="font-size:13px;font-weight:600;color:${isA?c.color:'#C9D1D9'};font-family:'Montserrat',sans-serif;margin-bottom:3px">${catLabel(c.id)}</div>
-            <div style="font-family:'Montserrat',sans-serif;font-size:20px;font-weight:700;color:${isA?'#E6EDF3':'#8B949E'}">${fmtDur(secs)}</div>
-            <div style="font-size:10px;color:#8B949E;margin-top:2px">${t.target}: ${c.target}h</div>
-            ${isA?`<div style="position:absolute;top:10px;right:10px;width:9px;height:9px;border-radius:50%;background:${c.color};animation:pulse 1.5s infinite"></div>`:''}</button>`
-        }).join("")}
-      </div>
-    </div>`;
+    return`<div class="fade-in"><p style="font-size:12px;color:#8B949E;margin:0 0 14px">${t.tapStart}</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${CATEGORIES.map(c=>{
+        const isA=state.activeSession?.category===c.id;const secs=totals[c.id]||0;const pct=c.target>0?Math.min(100,(secs/3600/c.target)*100):0;
+        return`<button onclick="tapCategory('${c.id}')" class="cat-btn" style="position:relative;overflow:hidden;padding:16px 14px;border-radius:14px;background:${isA?`linear-gradient(145deg,${c.color}18,${c.color}06)`:'#161B22'};border:2px solid ${isA?c.color:'#21262D'};${isA?'animation:ripple 2s infinite':''}">
+          <div style="position:absolute;bottom:0;left:0;height:3px;width:${pct}%;background:${c.color};border-radius:0 3px 3px 0;transition:width 1s;opacity:.7"></div>
+          <div style="font-size:26px;margin-bottom:6px">${c.icon}</div>
+          <div style="font-size:13px;font-weight:600;color:${isA?c.color:'#C9D1D9'};font-family:'Montserrat',sans-serif;margin-bottom:3px">${catLabel(c.id)}</div>
+          <div style="font-family:'Montserrat',sans-serif;font-size:20px;font-weight:700;color:${isA?'#E6EDF3':'#8B949E'}">${fmtDur(secs)}</div>
+          <div style="font-size:10px;color:#8B949E;margin-top:2px">${t.target}: ${c.target}h</div>
+          ${isA?`<div style="position:absolute;top:10px;right:10px;width:9px;height:9px;border-radius:50%;background:${c.color};animation:pulse 1.5s infinite"></div>`:''}</button>`}).join("")}</div></div>`;
   }
 
   function renderDaily(totals,totalSec,t){
     if(totalSec<60)return`<div class="fade-in"><h2 style="font-size:16px;font-weight:700;margin:0 0 16px;font-family:'Montserrat',sans-serif">${t.todayBreak}</h2><div style="text-align:center;padding:40px;color:#8B949E"><div style="font-size:40px;margin-bottom:8px">📊</div><p>${t.startTracking}</p></div></div>`;
-    return`<div class="fade-in">
-      <h2 style="font-size:16px;font-weight:700;margin:0 0 16px;font-family:'Montserrat',sans-serif">${t.todayBreak}</h2>
+    return`<div class="fade-in"><h2 style="font-size:16px;font-weight:700;margin:0 0 16px;font-family:'Montserrat',sans-serif">${t.todayBreak}</h2>
       <canvas id="pieChart" style="max-height:220px;margin:0 auto 16px;display:block"></canvas>
-      <div style="display:flex;flex-direction:column;gap:8px">${CATEGORIES.map(c=>{
-        const hrs=(totals[c.id]||0)/3600;const pct=c.target>0?Math.min(100,(hrs/c.target)*100):0;
-        return`<div style="display:flex;align-items:center;gap:10px">
-          <div style="width:10px;height:10px;border-radius:3px;background:${c.color};flex-shrink:0"></div>
-          <div style="flex:1;font-size:12px;color:#C9D1D9">${catLabel(c.id)}</div>
-          <div class="progress-bar" style="width:65px"><div class="progress-fill" style="width:${pct}%;background:${c.color}"></div></div>
-          <div style="font-size:11px;color:#8B949E;font-family:'Montserrat',sans-serif;font-weight:500;min-width:55px;text-align:right">${hrs.toFixed(1)}/${c.target}h</div>
-        </div>`}).join("")}</div></div>`;
+      <div style="display:flex;flex-direction:column;gap:8px">${CATEGORIES.map(c=>{const hrs=(totals[c.id]||0)/3600;const pct=c.target>0?Math.min(100,(hrs/c.target)*100):0;
+        return`<div style="display:flex;align-items:center;gap:10px"><div style="width:10px;height:10px;border-radius:3px;background:${c.color};flex-shrink:0"></div><div style="flex:1;font-size:12px;color:#C9D1D9">${catLabel(c.id)}</div><div class="progress-bar" style="width:65px"><div class="progress-fill" style="width:${pct}%;background:${c.color}"></div></div><div style="font-size:11px;color:#8B949E;font-family:'Montserrat',sans-serif;font-weight:500;min-width:55px;text-align:right">${hrs.toFixed(1)}/${c.target}h</div></div>`}).join("")}</div></div>`;
   }
 
   function renderWeekly(totals,t){
-    return`<div class="fade-in">
-      <h2 style="font-size:16px;font-weight:700;margin:0 0 16px;font-family:'Montserrat',sans-serif">${t.weekTrend}</h2>
+    return`<div class="fade-in"><h2 style="font-size:16px;font-weight:700;margin:0 0 16px;font-family:'Montserrat',sans-serif">${t.weekTrend}</h2>
       <canvas id="lineChart" style="max-height:260px;margin-bottom:20px"></canvas>
       <h3 style="font-size:13px;font-weight:600;margin:0 0 10px;font-family:'Montserrat',sans-serif;color:#8B949E">${t.todayVsTarget}</h3>
       <canvas id="barChart" style="max-height:200px"></canvas></div>`;
@@ -475,21 +360,60 @@ Detected patterns: ${snap.flags||"none"}${triggerContext}`;
   function renderLog(today,t){
     let activeHTML="";
     if(state.activeSession){const ac=CATEGORIES.find(c=>c.id===state.activeSession.category);
-      activeHTML=`<div style="padding:10px 14px;background:${ac.color}12;border:1px solid ${ac.color}33;border-radius:12px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
-        <div style="width:8px;height:8px;border-radius:50%;background:${ac.color};animation:pulse 1.5s infinite"></div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:600;color:${ac.color};font-family:'Montserrat',sans-serif">${ac.icon} ${catLabel(ac.id)}</div>
-        <div style="font-size:11px;color:#8B949E">${t.started} ${fmtTime(state.activeSession.start)} · ${fmtDur((Date.now()-state.activeSession.start)/1000)}</div></div>
-        <div style="font-size:10px;padding:3px 8px;background:#3BA67633;border-radius:20px;color:#3BA676;font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-family:'Montserrat',sans-serif">${t.live}</div></div>`}
+      activeHTML=`<div style="padding:10px 14px;background:${ac.color}12;border:1px solid ${ac.color}33;border-radius:12px;margin-bottom:12px;display:flex;align-items:center;gap:10px"><div style="width:8px;height:8px;border-radius:50%;background:${ac.color};animation:pulse 1.5s infinite"></div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:${ac.color};font-family:'Montserrat',sans-serif">${ac.icon} ${catLabel(ac.id)}</div><div style="font-size:11px;color:#8B949E">${t.started} ${fmtTime(state.activeSession.start)} · ${fmtDur((Date.now()-state.activeSession.start)/1000)}</div></div><div style="font-size:10px;padding:3px 8px;background:#3BA67633;border-radius:20px;color:#3BA676;font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-family:'Montserrat',sans-serif">${t.live}</div></div>`}
+
     const dayKeys=Object.keys(state.days||{}).sort((a,b)=>b.localeCompare(a)).slice(0,7);
     let logsHTML="";
     if(!dayKeys.length&&!state.activeSession)logsHTML=`<div style="text-align:center;padding:40px;color:#8B949E"><div style="font-size:40px;margin-bottom:8px">📋</div><p>${t.noLogs}</p></div>`;
-    else logsHTML=dayKeys.map(ds=>{const logs=state.days[ds]||[];if(!logs.length)return"";
+    else logsHTML=dayKeys.map(ds=>{
+      const logs=state.days[ds]||[];if(!logs.length)return"";
       return`<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;color:#8B949E;font-family:'Montserrat',sans-serif;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">${ds===today?(state.lang==="id"?"Hari Ini":"Today"):ds}</div>
-      ${[...logs].reverse().map(l=>{const cat=CATEGORIES.find(c=>c.id===l.category);
-        return`<div class="log-row"><div style="width:32px;height:32px;border-radius:8px;background:${cat.color}18;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">${cat.icon}</div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:500;color:#C9D1D9;font-family:'Montserrat',sans-serif">${catLabel(cat.id)}</div>
-        <div style="font-size:11px;color:#8B949E">${fmtTime(l.start)} → ${fmtTime(l.end)}</div></div>
-        <div style="font-size:13px;font-weight:700;font-family:'Montserrat',sans-serif;color:${cat.color}">${fmtDur(l.duration)}</div></div>`}).join("")}</div>`}).join("");
+        ${logs.map((l,origIdx)=>{
+          const cat=CATEGORIES.find(c=>c.id===l.category);
+          const isEditing=editingEntry&&editingEntry.dateStr===ds&&editingEntry.index===origIdx;
+
+          if(isEditing){
+            // Edit panel
+            return`<div class="edit-panel">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                <div style="font-size:20px">${cat.icon}</div>
+                <div style="font-size:13px;font-weight:600;color:${cat.color};font-family:'Montserrat',sans-serif">${t.editLog}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <label style="font-size:11px;color:#8B949E;min-width:50px">${t.category}</label>
+                  <select id="edit-category" class="cat-select" style="flex:1">
+                    ${CATEGORIES.map(c2=>`<option value="${c2.id}" ${c2.id===l.category?'selected':''}>${c2.icon} ${catLabel(c2.id)}</option>`).join("")}
+                  </select>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <label style="font-size:11px;color:#8B949E;min-width:50px">${t.startTime}</label>
+                  <input id="edit-start" type="time" class="edit-input" style="flex:1" value="${fmtTimeInput(l.start)}">
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <label style="font-size:11px;color:#8B949E;min-width:50px">${t.endTime}</label>
+                  <input id="edit-end" type="time" class="edit-input" style="flex:1" value="${fmtTimeInput(l.end)}">
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:14px">
+                <button onclick="saveEdit()" class="edit-btn" style="flex:1;background:#3BA676;color:#fff">${t.saveEdit}</button>
+                <button onclick="cancelEdit()" class="edit-btn" style="flex:1;background:#21262D;color:#8B949E">${t.cancelEdit}</button>
+                <button onclick="deleteEntry()" class="edit-btn" style="background:#21262D;color:#F85149;padding:4px 12px">🗑</button>
+              </div>
+            </div>`;
+          }
+
+          // Normal log row
+          return`<div class="log-row">
+            <div style="width:32px;height:32px;border-radius:8px;background:${cat.color}18;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">${cat.icon}</div>
+            <div style="flex:1"><div style="font-size:13px;font-weight:500;color:#C9D1D9;font-family:'Montserrat',sans-serif">${catLabel(cat.id)}</div><div style="font-size:11px;color:#8B949E">${fmtTime(l.start)} → ${fmtTime(l.end)}</div></div>
+            <div style="font-size:13px;font-weight:700;font-family:'Montserrat',sans-serif;color:${cat.color};margin-right:6px">${fmtDur(l.duration)}</div>
+            <button onclick="startEdit('${ds}',${origIdx})" class="edit-btn" style="background:#21262D;color:#8B949E;font-size:13px;padding:5px 8px" title="${t.editLog}">✏️</button>
+          </div>`;
+        }).reverse().join("")}
+      </div>`;
+    }).join("");
+
     return`<div class="fade-in"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <h2 style="font-size:16px;font-weight:700;margin:0;font-family:'Montserrat',sans-serif">${t.activityLog}</h2>
       <button onclick="clearData()" class="hdr-btn" style="padding:5px 12px;background:#21262D;border:1px solid #30363D;border-radius:6px;color:#F85149;font-size:11px;font-family:'Montserrat',sans-serif;font-weight:600">${t.clearAll}</button></div>
@@ -498,96 +422,37 @@ Detected patterns: ${snap.flags||"none"}${triggerContext}`;
 
   function renderInsights(t,hasKey){
     const statusDot=hasKey?`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3BA676;margin-right:6px"></span>${t.aiActive}`:`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#484F58;margin-right:6px"></span>${t.aiOff}`;
-
     let bodyHTML="";
-    if(insightLoading){
-      bodyHTML=`<div style="margin-top:16px;display:flex;flex-direction:column;gap:10px">${[85,100,65,90].map(w=>`<div class="shimmer" style="height:14px;width:${w}%"></div>`).join("")}</div>`;
-    }else if(aiSuggestion){
-      bodyHTML=`<div class="ai-card fade-in" style="margin-top:16px;background:linear-gradient(145deg,#161B22cc,#21262D44);border:1px solid #30363D;color:#C9D1D9;white-space:pre-wrap">${aiSuggestion}</div>
-      ${aiSuggestionTime?`<div style="margin-top:6px;font-size:10px;color:#484F58;text-align:right">${t.lastChecked}: ${fmtTimeAgo(aiSuggestionTime)}</div>`:''}`;
-    }
+    if(insightLoading)bodyHTML=`<div style="margin-top:16px;display:flex;flex-direction:column;gap:10px">${[85,100,65,90].map(w=>`<div class="shimmer" style="height:14px;width:${w}%"></div>`).join("")}</div>`;
+    else if(aiSuggestion)bodyHTML=`<div class="ai-card fade-in" style="margin-top:16px;background:linear-gradient(145deg,#161B22cc,#21262D44);border:1px solid #30363D;color:#C9D1D9;white-space:pre-wrap">${aiSuggestion}</div>${aiSuggestionTime?`<div style="margin-top:6px;font-size:10px;color:#484F58;text-align:right">${t.lastChecked}: ${fmtTimeAgo(aiSuggestionTime)}</div>`:''}`;
 
-    // Week summary
     const days=getLast7();const wt={};CATEGORIES.forEach(c=>wt[c.id]=0);let dwd=0;
-    days.forEach(d=>{const dt=getTotals(d);if(CATEGORIES.some(c=>dt[c.id]>0))dwd++;CATEGORIES.forEach(c=>wt[c.id]+=(dt[c.id]||0))});
-    const div=Math.max(dwd,1);
+    days.forEach(d=>{const dt=getTotals(d);if(CATEGORIES.some(c=>dt[c.id]>0))dwd++;CATEGORIES.forEach(c=>wt[c.id]+=(dt[c.id]||0))});const div=Math.max(dwd,1);
 
     return`<div class="fade-in">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <h2 style="font-size:16px;font-weight:700;margin:0;font-family:'Montserrat',sans-serif">🤖 ${t.aiInsights}</h2>
-        <div style="font-size:11px;color:${hasKey?'#3BA676':'#484F58'};display:flex;align-items:center">${statusDot}</div>
-      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><h2 style="font-size:16px;font-weight:700;margin:0;font-family:'Montserrat',sans-serif">🤖 ${t.aiInsights}</h2><div style="font-size:11px;color:${hasKey?'#3BA676':'#484F58'};display:flex;align-items:center">${statusDot}</div></div>
       <p style="font-size:12px;color:#8B949E;margin:0 0 14px">${t.insightsDesc}</p>
-
-      ${hasKey?`
-        <div style="display:flex;gap:8px;margin-bottom:4px">
-          <button onclick="callAI('manual')" ${insightLoading?'disabled':''} class="insight-btn" style="background:${insightLoading?'#21262D':'linear-gradient(135deg,#3BA676,#4A9BD9)'};cursor:${insightLoading?'wait':'pointer'};opacity:${insightLoading?.7:1}">${insightLoading?t.analyzing:t.getInsights}</button>
-        </div>
-        <button onclick="showSetupScreen()" style="width:100%;padding:8px;border:none;border-radius:8px;background:transparent;color:#484F58;font-size:11px;cursor:pointer;font-family:'Montserrat',sans-serif">${t.changeKey}</button>
-      `:`<button onclick="showSetupScreen()" class="insight-btn" style="background:linear-gradient(135deg,#3BA676,#4A9BD9)">${t.setupTitle}</button>`}
-
+      ${hasKey?`<button onclick="callAI('manual')" ${insightLoading?'disabled':''} class="insight-btn" style="background:${insightLoading?'#21262D':'linear-gradient(135deg,#3BA676,#4A9BD9)'};cursor:${insightLoading?'wait':'pointer'};opacity:${insightLoading?.7:1};margin-bottom:4px">${insightLoading?t.analyzing:t.getInsights}</button><button onclick="showSetupScreen()" style="width:100%;padding:8px;border:none;border-radius:8px;background:transparent;color:#484F58;font-size:11px;cursor:pointer;font-family:'Montserrat',sans-serif">${t.changeKey}</button>`:`<button onclick="showSetupScreen()" class="insight-btn" style="background:linear-gradient(135deg,#3BA676,#4A9BD9)">${t.setupTitle}</button>`}
       ${bodyHTML}
-
       <div style="margin-top:20px;padding:14px;background:#161B22;border-radius:12px;border:1px solid #21262D">
         <div style="font-size:11px;font-weight:700;color:#8B949E;margin-bottom:10px;font-family:'Montserrat',sans-serif;text-transform:uppercase;letter-spacing:1px">${t.weekSummary}</div>
-        ${CATEGORIES.map(c=>{
-          const avg=wt[c.id]/div/3600;const diff=avg-c.target;const ds=diff>=0?`+${diff.toFixed(1)}`:diff.toFixed(1);
-          const dc=Math.abs(diff)<.5?"#3BA676":(c.id==="work"&&diff>0)?"#E0637C":diff>0?"#3BA676":"#E8A838";
-          return`<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
-            <span style="font-size:16px">${c.icon}</span><span style="flex:1;font-size:12px;color:#C9D1D9">${catLabel(c.id)}</span>
-            <span style="font-size:12px;font-weight:600;font-family:'Montserrat',sans-serif;color:#8B949E">${avg.toFixed(1)}h/d</span>
-            <span style="font-size:11px;font-weight:700;font-family:'Montserrat',sans-serif;color:${dc};min-width:42px;text-align:right">${ds}h</span></div>`}).join("")}
+        ${CATEGORIES.map(c=>{const avg=wt[c.id]/div/3600;const diff=avg-c.target;const ds=diff>=0?`+${diff.toFixed(1)}`:diff.toFixed(1);const dc=Math.abs(diff)<.5?"#3BA676":(c.id==="work"&&diff>0)?"#E0637C":diff>0?"#3BA676":"#E8A838";
+          return`<div style="display:flex;align-items:center;gap:8px;padding:5px 0"><span style="font-size:16px">${c.icon}</span><span style="flex:1;font-size:12px;color:#C9D1D9">${catLabel(c.id)}</span><span style="font-size:12px;font-weight:600;font-family:'Montserrat',sans-serif;color:#8B949E">${avg.toFixed(1)}h/d</span><span style="font-size:11px;font-weight:700;font-family:'Montserrat',sans-serif;color:${dc};min-width:42px;text-align:right">${ds}h</span></div>`}).join("")}
       </div>
-
-      <div style="margin-top:16px;padding:12px;background:#161B2280;border-radius:10px;border:1px solid #21262D">
-        <p style="font-size:11px;color:#484F58;line-height:1.5;margin:0">
-          ${state.lang==="id"
-            ?"🔒 API key disimpan hanya di device ini (localStorage). Tidak pernah dikirim ke server mana pun kecuali Anthropic API langsung."
-            :"🔒 API key stored only on this device (localStorage). Never sent to any server except Anthropic API directly."}
-        </p>
-      </div>
-    </div>`;
+      <div style="margin-top:16px;padding:12px;background:#161B2280;border-radius:10px;border:1px solid #21262D"><p style="font-size:11px;color:#484F58;line-height:1.5;margin:0">${state.lang==="id"?"🔒 API key hanya di device ini. Tidak pernah dikirim ke server lain.":"🔒 API key stored only on this device."}</p></div></div>`;
   }
 
   // ─── Charts ───
   function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id]}}
-  function drawPieChart(totals){
-    destroyChart("pie");const el=document.getElementById("pieChart");if(!el)return;
-    const filtered=CATEGORIES.filter(c=>(totals[c.id]||0)>60);
-    charts.pie=new Chart(el,{type:"doughnut",data:{labels:filtered.map(c=>catLabel(c.id)),datasets:[{data:filtered.map(c=>Math.round((totals[c.id]||0)/60)),backgroundColor:filtered.map(c=>c.color),borderWidth:0,hoverOffset:6}]},options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw}m`},backgroundColor:"#161B22",borderColor:"#21262D",borderWidth:1}},cutout:"55%"}});
-  }
-  function drawLineChart(){
-    destroyChart("line");const el=document.getElementById("lineChart");if(!el)return;
-    const days=getLast7();
-    charts.line=new Chart(el,{type:"line",data:{labels:days.map(d=>getDayName(d)),datasets:CATEGORIES.map(c=>({label:catLabel(c.id),data:days.map(d=>+((getTotals(d)[c.id]||0)/3600).toFixed(1)),borderColor:c.color,backgroundColor:c.color+"33",borderWidth:2,pointRadius:3,pointBackgroundColor:c.color,tension:.3,fill:false}))},options:{responsive:true,interaction:{mode:"index",intersect:false},scales:{y:{ticks:{color:"#8B949E",font:{family:"Roboto",size:10},callback:v=>v+"h"},grid:{color:"#21262D"},border:{color:"#21262D"}},x:{ticks:{color:"#8B949E",font:{family:"Roboto",size:10}},grid:{display:false},border:{color:"#21262D"}}},plugins:{legend:{display:true,position:"bottom",labels:{color:"#8B949E",font:{family:"Roboto",size:10},boxWidth:12,padding:8}},tooltip:{backgroundColor:"#161B22",borderColor:"#21262D",borderWidth:1,callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.raw}h`}}}}});
-  }
-  function drawBarChart(totals){
-    destroyChart("bar");const el=document.getElementById("barChart");if(!el)return;const t=T();
-    charts.bar=new Chart(el,{type:"bar",data:{labels:CATEGORIES.map(c=>c.icon),datasets:[{label:t.actual,data:CATEGORIES.map(c=>+((totals[c.id]||0)/3600).toFixed(1)),backgroundColor:CATEGORIES.map(c=>c.color),borderRadius:4,barPercentage:.7},{label:t.targetLabel,data:CATEGORIES.map(c=>c.target),backgroundColor:"#21262D",borderRadius:4,barPercentage:.7}]},options:{responsive:true,scales:{y:{ticks:{color:"#8B949E",font:{family:"Roboto",size:10},callback:v=>v+"h"},grid:{color:"#21262D"},border:{color:"#21262D"}},x:{ticks:{font:{size:16}},grid:{display:false},border:{color:"#21262D"}}},plugins:{legend:{display:true,position:"bottom",labels:{color:"#8B949E",font:{family:"Roboto",size:10},boxWidth:12}},tooltip:{backgroundColor:"#161B22",borderColor:"#21262D",borderWidth:1,callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.raw}h`}}}}});
-  }
+  function drawPieChart(totals){destroyChart("pie");const el=document.getElementById("pieChart");if(!el)return;const filtered=CATEGORIES.filter(c=>(totals[c.id]||0)>60);charts.pie=new Chart(el,{type:"doughnut",data:{labels:filtered.map(c=>catLabel(c.id)),datasets:[{data:filtered.map(c=>Math.round((totals[c.id]||0)/60)),backgroundColor:filtered.map(c=>c.color),borderWidth:0,hoverOffset:6}]},options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw}m`},backgroundColor:"#161B22",borderColor:"#21262D",borderWidth:1}},cutout:"55%"}})}
+  function drawLineChart(){destroyChart("line");const el=document.getElementById("lineChart");if(!el)return;const days=getLast7();charts.line=new Chart(el,{type:"line",data:{labels:days.map(d=>getDayName(d)),datasets:CATEGORIES.map(c=>({label:catLabel(c.id),data:days.map(d=>+((getTotals(d)[c.id]||0)/3600).toFixed(1)),borderColor:c.color,backgroundColor:c.color+"33",borderWidth:2,pointRadius:3,pointBackgroundColor:c.color,tension:.3,fill:false}))},options:{responsive:true,interaction:{mode:"index",intersect:false},scales:{y:{ticks:{color:"#8B949E",font:{family:"Roboto",size:10},callback:v=>v+"h"},grid:{color:"#21262D"},border:{color:"#21262D"}},x:{ticks:{color:"#8B949E",font:{family:"Roboto",size:10}},grid:{display:false},border:{color:"#21262D"}}},plugins:{legend:{display:true,position:"bottom",labels:{color:"#8B949E",font:{family:"Roboto",size:10},boxWidth:12,padding:8}},tooltip:{backgroundColor:"#161B22",borderColor:"#21262D",borderWidth:1,callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.raw}h`}}}}})}
+  function drawBarChart(totals){destroyChart("bar");const el=document.getElementById("barChart");if(!el)return;const t=TT();charts.bar=new Chart(el,{type:"bar",data:{labels:CATEGORIES.map(c=>c.icon),datasets:[{label:t.actual,data:CATEGORIES.map(c=>+((totals[c.id]||0)/3600).toFixed(1)),backgroundColor:CATEGORIES.map(c=>c.color),borderRadius:4,barPercentage:.7},{label:t.targetLabel,data:CATEGORIES.map(c=>c.target),backgroundColor:"#21262D",borderRadius:4,barPercentage:.7}]},options:{responsive:true,scales:{y:{ticks:{color:"#8B949E",font:{family:"Roboto",size:10},callback:v=>v+"h"},grid:{color:"#21262D"},border:{color:"#21262D"}},x:{ticks:{font:{size:16}},grid:{display:false},border:{color:"#21262D"}}},plugins:{legend:{display:true,position:"bottom",labels:{color:"#8B949E",font:{family:"Roboto",size:10},boxWidth:12}},tooltip:{backgroundColor:"#161B22",borderColor:"#21262D",borderWidth:1,callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.raw}h`}}}}})}
 
-  // ─── PWA Install ───
-  window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstallPrompt=e});
-
-  // ─── Service Worker ───
   if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 
-  // ─── Boot ───
   render();
-
-  // Tick: update UI + check for pattern shifts
-  setInterval(()=>{
-    render();
-    // Auto AI check
-    if(shouldAutoTriggerAI()){
-      callAI("auto");
-    }
-  },PATTERN_CHECK_INTERVAL);
-
-  // Faster UI tick for live timer
-  setInterval(()=>{
-    if(state.activeSession&&(currentView==="tracker"||currentView==="log"))render();
-  },15000);
+  setInterval(()=>{render();if(shouldAutoTriggerAI())callAI("auto")},PATTERN_CHECK_INTERVAL);
+  setInterval(()=>{if(state.activeSession&&(currentView==="tracker"||currentView==="log"))render()},15000);
   </script>
 </body>
 </html>
