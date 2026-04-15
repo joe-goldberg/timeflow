@@ -83,6 +83,10 @@
       editLog:"Edit",saveEdit:"Save",cancelEdit:"Cancel",deleteEntry:"Delete",
       startTime:"Start",endTime:"End",category:"Category",
       deleteConfirm:"Delete this entry?",
+      notifEnable:"Enable Notifications",notifOn:"Notifications On",notifOff:"Notifications Off",
+      notifIdle:"You haven't tracked anything for a while. What are you up to?",
+      notifOver:"You've exceeded your daily target for",
+      notifReminder:"TimeFlow Reminder",notifAlert:"TimeFlow Alert",
     },
     id:{
       family:"Keluarga/Anak",work:"Kerja",self:"Waktu Sendiri",partner:"Pasangan",friends:"Teman",sleep:"Tidur",
@@ -103,6 +107,10 @@
       editLog:"Edit",saveEdit:"Simpan",cancelEdit:"Batal",deleteEntry:"Hapus",
       startTime:"Mulai",endTime:"Selesai",category:"Kategori",
       deleteConfirm:"Hapus catatan ini?",
+      notifEnable:"Aktifkan Notifikasi",notifOn:"Notifikasi Aktif",notifOff:"Notifikasi Mati",
+      notifIdle:"Kamu belum tracking. Sedang ngapain sekarang?",
+      notifOver:"Kamu sudah melebihi target harian untuk",
+      notifReminder:"Pengingat TimeFlow",notifAlert:"Alert TimeFlow",
     }
   };
 
@@ -110,6 +118,8 @@
   const NUDGE_MS=120*60*1000;
   const AI_COOLDOWN_MS=30*60*1000;
   const PATTERN_CHECK_INTERVAL=60*1000;
+  const NOTIF_IDLE_MS=2*60*60*1000; // 2 hours no tracking = reminder
+  const NOTIF_COOLDOWN_MS=30*60*1000; // Don't spam: min 30 min between same notif type
 
   let state=loadState();
   let currentView="tracker";
@@ -123,6 +133,8 @@
   let aiSuggestionTime=state.aiSuggestionTime||null;
   let patternShiftDetected=false;
   let editingEntry=null; // {dateStr, index}
+  let notifPermission=Notification?.permission||"default";
+  let lastNotifSent={}; // {type: timestamp} to prevent spam
 
   function loadState(){try{const r=localStorage.getItem(STORAGE_KEY);if(r)return JSON.parse(r)}catch{}return{days:{},activeSession:null,lang:"en",apiKey:"",aiSuggestion:null,aiSuggestionTime:null,lastPatternSnapshot:null}}
   function saveState(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}catch{}}
@@ -201,6 +213,14 @@
     saveState();render();
   }
   function toggleLang(){state.lang=state.lang==="en"?"id":"en";saveState();render()}
+  function toggleNotif(){
+    if(notifPermission==="granted"){
+      // Can't revoke programmatically, tell user
+      alert(state.lang==="id"?"Untuk matikan notifikasi, ubah di pengaturan browser untuk situs ini.":"To disable notifications, change browser settings for this site.");
+    }else{
+      requestNotifPermission();
+    }
+  }
   function clearData(){if(confirm(TT().clearConfirm)){const l=state.lang,k=state.apiKey;state={days:{},activeSession:null,lang:l,apiKey:k,aiSuggestion:null,aiSuggestionTime:null,lastPatternSnapshot:null};aiSuggestion=null;aiSuggestionTime=null;saveState();render()}}
   function switchView(v){currentView=v;editingEntry=null;render()}
   function saveApiKey(){const inp=document.getElementById("apiKeyInput");if(inp)tempApiKey=inp.value.trim();if(tempApiKey){state.apiKey=tempApiKey;saveState();showSetup=false;tempApiKey="";render();setTimeout(()=>callAI("manual"),300)}}
@@ -250,6 +270,74 @@
   }
 
   function getRuleAlerts(){
+
+  // ─── Notification System ───
+  async function requestNotifPermission(){
+    if(!("Notification" in window))return;
+    const result=await Notification.requestPermission();
+    notifPermission=result;
+    render();
+  }
+
+  function sendNotif(title,body,tag){
+    if(notifPermission!=="granted")return;
+    // Cooldown check
+    if(lastNotifSent[tag]&&(Date.now()-lastNotifSent[tag])<NOTIF_COOLDOWN_MS)return;
+    lastNotifSent[tag]=Date.now();
+    try{
+      new Notification(title,{body,icon:"icon-192.png",tag,badge:"icon-192.png",vibrate:[200,100,200],silent:false});
+    }catch(e){
+      // Fallback for service worker requirement on some browsers
+      if(navigator.serviceWorker?.ready){
+        navigator.serviceWorker.ready.then(reg=>{
+          reg.showNotification(title,{body,icon:"icon-192.png",tag,badge:"icon-192.png",vibrate:[200,100,200]});
+        }).catch(()=>{});
+      }
+    }
+  }
+
+  function checkNotifications(){
+    if(notifPermission!=="granted")return;
+    const today=getToday(),tot=getTotals(today);
+    const t=TT();
+
+    // 1. IDLE REMINDER: no active session and last activity was >2h ago
+    if(!state.activeSession){
+      const dayLogs=state.days?.[today]||[];
+      const lastEnd=dayLogs.length>0?dayLogs[dayLogs.length-1].end:null;
+      const hr=new Date().getHours();
+      // Only remind during waking hours (7am-11pm) and if there was previous activity today
+      if(lastEnd&&hr>=7&&hr<=23){
+        const idleTime=Date.now()-lastEnd;
+        if(idleTime>NOTIF_IDLE_MS){
+          sendNotif(t.notifReminder,t.notifIdle,"idle-reminder");
+        }
+      }
+    }
+
+    // 2. OVER-TARGET ALERTS: when any category exceeds its target
+    CATEGORIES.forEach(c=>{
+      if(c.id==="sleep")return; // Don't alert for sleeping "too much"
+      const hrs=(tot[c.id]||0)/3600;
+      if(hrs>c.target){
+        const tag=`over-${c.id}`;
+        sendNotif(t.notifAlert,`${t.notifOver} ${catLabel(c.id)}: ${hrs.toFixed(1)}h / ${c.target}h`,tag);
+      }
+    });
+
+    // 3. LONG SESSION WARNING (>2h on same activity)
+    if(state.activeSession){
+      const elapsed=(Date.now()-state.activeSession.start)/1000/3600;
+      if(elapsed>2){
+        const cat=CATEGORIES.find(c=>c.id===state.activeSession.category);
+        const msg=state.lang==="id"
+          ?`Sudah ${elapsed.toFixed(1)} jam di "${catLabel(cat.id)}". Waktunya ganti aktivitas?`
+          :`${elapsed.toFixed(1)}h on "${catLabel(cat.id)}". Time to switch?`;
+        sendNotif(t.notifReminder,msg,"long-session");
+      }
+    }
+  }
+  // ─── End Notification System ───
     const today=getToday(),tot=getTotals(today);const totalT=Object.values(tot).reduce((a,b)=>a+b,0);
     if(totalT<1800)return[];
     const wH=tot.work/3600,sH=tot.sleep/3600,fH=tot.family/3600,meH=tot.self/3600,pH=tot.partner/3600;
@@ -307,6 +395,7 @@
           <div><h1 style="margin:0;font-size:22px;font-weight:800;font-family:'Montserrat',sans-serif;letter-spacing:-.5px;background:linear-gradient(135deg,#3BA676,#4A9BD9);-webkit-background-clip:text;-webkit-text-fill-color:transparent">⏱ TimeFlow</h1><p style="margin:2px 0 0;font-size:11px;color:#8B949E">${dateStr}</p></div>
           <div style="display:flex;align-items:center;gap:10px">
             <button onclick="toggleLang()" class="hdr-btn" style="padding:4px 9px;border-radius:20px;border:1px solid #30363D;background:#161B22;color:#C9D1D9;font-size:11px;font-weight:600;font-family:'Montserrat',sans-serif">${state.lang==="en"?"🇮🇩 ID":"🇬🇧 EN"}</button>
+            ${"Notification" in window?`<button onclick="toggleNotif()" class="hdr-btn" style="padding:4px 9px;border-radius:20px;border:1px solid ${notifPermission==="granted"?"#2D5A43":"#30363D"};background:${notifPermission==="granted"?"#14261E":"#161B22"};color:${notifPermission==="granted"?GREEN:GT};font-size:11px;font-weight:600;font-family:'Montserrat',sans-serif">${notifPermission==="granted"?"🔔":"🔕"}</button>`:""}
             <div style="text-align:right"><div style="font-size:18px;font-weight:700;font-family:'Montserrat',sans-serif">${fmtDur(totalSec)}</div><div style="font-size:9px;color:#8B949E;text-transform:uppercase;letter-spacing:1px">${t.trackedToday}</div></div>
           </div>
         </div>
@@ -451,7 +540,7 @@
   if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 
   render();
-  setInterval(()=>{render();if(shouldAutoTriggerAI())callAI("auto")},PATTERN_CHECK_INTERVAL);
+  setInterval(()=>{render();checkNotifications();if(shouldAutoTriggerAI())callAI("auto")},PATTERN_CHECK_INTERVAL);
   setInterval(()=>{if(state.activeSession&&(currentView==="tracker"||currentView==="log"))render()},15000);
   </script>
 </body>
