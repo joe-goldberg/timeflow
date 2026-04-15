@@ -389,13 +389,18 @@
     else if(currentView==="log")viewHTML=renderLog(today,t);
     else if(currentView==="insights")viewHTML=renderInsights(t,hasKey);
 
+    const hasNotifAPI = typeof Notification !== "undefined";
+    const notifBtnHTML = hasNotifAPI
+      ? `<button onclick="toggleNotif()" class="hdr-btn" style="padding:4px 9px;border-radius:20px;border:1px solid ${notifPermission==="granted"?"#2D5A43":"#30363D"};background:${notifPermission==="granted"?"#14261E":"#161B22"};color:${notifPermission==="granted"?GREEN:GT};font-size:13px;cursor:pointer">${notifPermission==="granted"?"🔔":"🔕"}</button>`
+      : "";
+
     app.innerHTML=`
       <div style="padding:16px 20px 10px;background:linear-gradient(180deg,#161B22,#0D1117);border-bottom:1px solid #21262D">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
           <div><h1 style="margin:0;font-size:22px;font-weight:800;font-family:'Montserrat',sans-serif;letter-spacing:-.5px;background:linear-gradient(135deg,#3BA676,#4A9BD9);-webkit-background-clip:text;-webkit-text-fill-color:transparent">⏱ TimeFlow</h1><p style="margin:2px 0 0;font-size:11px;color:#8B949E">${dateStr}</p></div>
           <div style="display:flex;align-items:center;gap:10px">
             <button onclick="toggleLang()" class="hdr-btn" style="padding:4px 9px;border-radius:20px;border:1px solid #30363D;background:#161B22;color:#C9D1D9;font-size:11px;font-weight:600;font-family:'Montserrat',sans-serif">${state.lang==="en"?"🇮🇩 ID":"🇬🇧 EN"}</button>
-            ${"Notification" in window?`<button onclick="toggleNotif()" class="hdr-btn" style="padding:4px 9px;border-radius:20px;border:1px solid ${notifPermission==="granted"?"#2D5A43":"#30363D"};background:${notifPermission==="granted"?"#14261E":"#161B22"};color:${notifPermission==="granted"?GREEN:GT};font-size:11px;font-weight:600;font-family:'Montserrat',sans-serif">${notifPermission==="granted"?"🔔":"🔕"}</button>`:""}
+            ${notifBtnHTML}
             <div style="text-align:right"><div style="font-size:18px;font-weight:700;font-family:'Montserrat',sans-serif">${fmtDur(totalSec)}</div><div style="font-size:9px;color:#8B949E;text-transform:uppercase;letter-spacing:1px">${t.trackedToday}</div></div>
           </div>
         </div>
