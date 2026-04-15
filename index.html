@@ -391,7 +391,7 @@
 
     const hasNotifAPI = typeof Notification !== "undefined";
     const notifBtnHTML = hasNotifAPI
-      ? `<button onclick="toggleNotif()" class="hdr-btn" style="padding:4px 9px;border-radius:20px;border:1px solid ${notifPermission==="granted"?"#2D5A43":"#30363D"};background:${notifPermission==="granted"?"#14261E":"#161B22"};color:${notifPermission==="granted"?GREEN:GT};font-size:13px;cursor:pointer">${notifPermission==="granted"?"🔔":"🔕"}</button>`
+      ? `<button onclick="toggleNotif()" class="hdr-btn" style="padding:4px 9px;border-radius:20px;border:1px solid ${notifPermission==="granted"?"#2D5A43":"#30363D"};background:${notifPermission==="granted"?"#14261E":"#161B22"};color:${notifPermission==="granted"?"#3BA676":"#8B949E"};font-size:13px;cursor:pointer">${notifPermission==="granted"?"🔔":"🔕"}</button>`
       : "";
 
     app.innerHTML=`
