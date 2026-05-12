@@ -186,7 +186,8 @@ function saveEd() {
   var sp = si.value.split(":"); var ep = ei.value.split(":");
   var ns = new Date(dp+"T"+("0"+sp[0]).slice(-2)+":"+("0"+sp[1]).slice(-2)+":00");
   var ne = new Date(dp+"T"+("0"+ep[0]).slice(-2)+":"+("0"+ep[1]).slice(-2)+":00");
-  if(isNaN(ns.getTime())||isNaN(ne.getTime())||ne<=ns) return;
+  if(isNaN(ns.getTime())||isNaN(ne.getTime())) return;
+  if(ne<=ns) { ne = new Date(ne.getTime() + 86400000); }
   logs[ee.i] = {category:ci.value, start:ns.getTime(), end:ne.getTime(), duration:(ne-ns)/1000};
   st.days[ee.d] = logs; ee=null; svs(); render();
 }
