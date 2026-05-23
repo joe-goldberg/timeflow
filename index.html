@@ -303,16 +303,11 @@ function render() {
   else if(cv==="log") viewH = rLog(today,t);
   else if(cv==="insights") viewH = rInsights(t,hasKey);
 
-  // Notif button
-  var nBtn = "";
+  // Notif button - always show, check support on tap
+  var nBtn = '<button onclick="togNotif()" class="hdr-btn" style="padding:6px 10px;border-radius:20px;border:1px solid #30363D;background:#161B22;color:#8B949E;font-size:12px;font-weight:700;min-width:36px;min-height:32px;font-family:Montserrat,sans-serif">N</button>';
   try {
-    if(typeof Notification !== "undefined") {
-      var np = Notification.permission;
-      var nc = np==="granted" ? "#3BA676" : "#8B949E";
-      var nbg = np==="granted" ? "#14261E" : "#161B22";
-      var nbd = np==="granted" ? "#2D5A43" : "#30363D";
-      var nicon = np==="granted" ? "ON" : "OFF";
-      nBtn = '<button onclick="togNotif()" class="hdr-btn" style="padding:4px 8px;border-radius:20px;border:1px solid '+nbd+';background:'+nbg+';color:'+nc+';font-size:10px;font-weight:700;font-family:Montserrat,sans-serif">'+nicon+'</button>';
+    if(typeof Notification !== "undefined" && Notification.permission === "granted") {
+      nBtn = '<button onclick="togNotif()" class="hdr-btn" style="padding:6px 10px;border-radius:20px;border:1px solid #2D5A43;background:#14261E;color:#3BA676;font-size:12px;font-weight:700;min-width:36px;min-height:32px;font-family:Montserrat,sans-serif">N</button>';
     }
   } catch(e) {}
 
@@ -340,12 +335,26 @@ function tBtn(id,label) {
 
 function togNotif() {
   try {
-    if(Notification.permission==="granted") {
-      alert(st.lang==="id"?"Ubah di pengaturan browser.":"Change in browser settings.");
-    } else {
-      Notification.requestPermission().then(function(){ render(); });
+    if(typeof Notification === "undefined") {
+      alert("Notifications not supported on this browser/device.");
+      return;
     }
-  } catch(e){}
+    if(Notification.permission === "granted") {
+      alert(st.lang==="id"?"Notifikasi sudah aktif! Ubah di Settings > TimeFlow.":"Notifications already on! Change in Settings > TimeFlow.");
+      new Notification("TimeFlow", {body: st.lang==="id"?"Notifikasi berfungsi!":"Notifications working!"});
+    } else {
+      Notification.requestPermission().then(function(result){
+        if(result === "granted") {
+          new Notification("TimeFlow", {body: st.lang==="id"?"Notifikasi aktif!":"Notifications enabled!"});
+        } else {
+          alert(st.lang==="id"?"Permission ditolak. Cek Settings > TimeFlow > Notifications.":"Permission denied. Check Settings > TimeFlow > Notifications.");
+        }
+        render();
+      });
+    }
+  } catch(e) {
+    alert("Notification error: " + e.message);
+  }
 }
 
 // ─── Views ───
