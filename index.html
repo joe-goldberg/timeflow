@@ -223,7 +223,7 @@ function callAI(trigger) {
   fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":st.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:500,messages:[{role:"user",content:prompt}]})
+    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:500,messages:[{role:"user",content:prompt}]}) 
   }).then(function(res){return res.json();}).then(function(data){
     if(data.content){var txt="";for(var i=0;i<data.content.length;i++)txt+=(data.content[i].text||"");it=txt;}
     else{it=isID?"Tidak ada respons.":"No response.";}
