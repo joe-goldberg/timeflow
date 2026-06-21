@@ -50,12 +50,12 @@ body{background:#0D1117;color:#E6EDF3;font-family:'Roboto',sans-serif;overflow-x
 
 // Safe emoji references (avoid ZWJ issues in template strings)
 var CATS = [
-  {id:"family", em:"\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66", color:"#E8A838", target:3},
-  {id:"work",   em:"\uD83D\uDCBC", color:"#7C6FAF", target:8},
-  {id:"self",   em:"\uD83E\uDDD8", color:"#3BA676", target:2},
-  {id:"partner",em:"\uD83D\uDC9B", color:"#E0637C", target:2},
-  {id:"friends",em:"\uD83E\uDD1D", color:"#4A9BD9", target:1},
-  {id:"sleep",  em:"\uD83D\uDE34", color:"#6B7B8D", target:8}
+  {id:"family", em:"👨‍👩‍👧‍👦", color:"#E8A838", target:3},
+  {id:"work",   em:"💼", color:"#7C6FAF", target:8},
+  {id:"self",   em:"🧘", color:"#3BA676", target:2},
+  {id:"partner",em:"💛", color:"#E0637C", target:2},
+  {id:"friends",em:"🤝", color:"#4A9BD9", target:1},
+  {id:"sleep",  em:"😴", color:"#6B7B8D", target:8}
 ];
 
 var L = {
@@ -220,16 +220,28 @@ function callAI(trigger) {
     ? "Kamu AI life coach personal. Analisis data tracking waktu pengguna (punya anak kecil). Max 3 poin, singkat, actionable, pakai emoji. Bahasa Indonesia santai. Max 120 kata. Tanpa heading markdown.\n\nHARI INI (jam "+hr+":00):\n"+todayStr+"\n7 HARI:\n"+weekStr
     : "You are a personal AI life coach. Analyze time tracking data (user has young kids). Max 3 points, short, actionable, use emoji. Warm tone. Max 120 words. No markdown headings.\n\nTODAY ("+hr+":00):\n"+todayStr+"\n7 DAYS:\n"+weekStr;
 
+  // FIX #1: max_tokens naik ke 4000 + tambah adaptive thinking agar Sonnet 4.6 bisa berpikir dengan benar
   fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":st.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:500,messages:[{role:"user",content:prompt}]})
+    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:4000,thinking:{type:"adaptive"},messages:[{role:"user",content:prompt}]})
   }).then(function(res){return res.json();}).then(function(data){
-    if(data.content){var txt="";for(var i=0;i<data.content.length;i++)txt+=(data.content[i].text||"");it=txt;}
-    else{it=isID?"Tidak ada respons.":"No response.";}
+    // FIX #2: extract hanya text blocks, skip thinking blocks
+    if(data.content){
+      var txt="";
+      for(var i=0;i<data.content.length;i++){
+        if(data.content[i].type==="text") txt+=(data.content[i].text||"");
+      }
+      // FIX #3: handle kasus txt kosong (misal semua blocks adalah thinking)
+      it = txt || (isID ? "Model tidak memberikan respons teks." : "Model returned no text response.");
+    }
+    else if(data.error){it="API Error: "+(data.error.message||JSON.stringify(data.error));}
+    else{it=isID?"Tidak ada respons. ":"No response. "+JSON.stringify(data);}
     aitt=Date.now();st.aiSuggestion=it;st.aiSuggestionTime=aitt;il=false;svs();render();
   }).catch(function(e){
-    it=isID?"Gagal menghubungi AI.":"Failed to reach AI.";il=false;render();
+    // FIX #4: tampilkan error asli agar bisa di-debug
+    it="Network/CORS Error: "+(e.message||e.toString());
+    il=false;svs();render();
   });
 }
 
@@ -402,7 +414,6 @@ function rWeekly(t) {
   for(i=0;i<days.length;i++){var dt=gt(days[i]);for(j=0;j<CATS.length;j++){if(dt[CATS[j].id]>0){hasData=true;break;}}if(hasData)break;}
   if(!hasData) return '<div class="fade-in"><h2 style="font-size:16px;font-weight:700;margin:0 0 16px;font-family:Montserrat,sans-serif">'+t.weekTrend+'</h2><p style="color:#8B949E;text-align:center;padding:40px">'+t.trackDays+'</p></div>';
   var h='<div class="fade-in"><h2 style="font-size:16px;font-weight:700;margin:0 0 16px;font-family:Montserrat,sans-serif">'+t.weekTrend+'</h2>';
-  // Simple table-based trend
   h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">';
   h+='<tr><td style="padding:4px;color:#8B949E"></td>';
   for(i=0;i<days.length;i++) h+='<td style="padding:4px;color:#8B949E;text-align:center">'+dn(days[i])+'</td>';
@@ -418,7 +429,6 @@ function rWeekly(t) {
     h+='</tr>';
   }
   h+='</table></div>';
-  // Today vs Target
   h+='<h3 style="font-size:14px;font-weight:600;margin:20px 0 10px;font-family:Montserrat,sans-serif;color:#8B949E">'+t.todayVsTarget+'</h3>';
   var todayTot=gt(td());
   for(j=0;j<CATS.length;j++){
@@ -438,7 +448,6 @@ function rWeekly(t) {
 function rLog(today,t) {
   var h = '<div class="fade-in"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="font-size:16px;font-weight:700;margin:0;font-family:Montserrat,sans-serif">'+t.activityLog+'</h2><button onclick="clearAll()" class="hdr-btn" style="padding:5px 12px;background:#21262D;border:1px solid #30363D;border-radius:6px;color:#F85149;font-size:11px;font-family:Montserrat,sans-serif;font-weight:600">'+t.clearAll+'</button></div>';
 
-  // Active session
   if(st.activeSession) {
     var ac=null; for(var ai=0;ai<CATS.length;ai++){if(CATS[ai].id===st.activeSession.category){ac=CATS[ai];break;}}
     if(ac) {
@@ -457,7 +466,6 @@ function rLog(today,t) {
   for(var di=0;di<dayKeys.length;di++) {
     var ds=dayKeys[di]; var logs=st.days[ds]||[]; if(logs.length===0) continue;
     h+='<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;color:#8B949E;font-family:Montserrat,sans-serif;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">'+(ds===today?(st.lang==="id"?"Hari Ini":"Today"):ds)+'</div>';
-    // Reverse display
     for(var li=logs.length-1;li>=0;li--) {
       var log=logs[li];
       var cat=null; for(var ci=0;ci<CATS.length;ci++){if(CATS[ci].id===log.category){cat=CATS[ci];break;}}
@@ -465,7 +473,6 @@ function rLog(today,t) {
       var isEd = ee && ee.d===ds && ee.i===li;
 
       if(isEd) {
-        // Edit panel
         var opts="";for(var oi=0;oi<CATS.length;oi++){opts+='<option value="'+CATS[oi].id+'"'+(CATS[oi].id===log.category?' selected':'')+'>'+CATS[oi].em+' '+cl(CATS[oi].id)+'</option>';}
         h+='<div class="edit-panel">' +
           '<div style="display:flex;flex-direction:column;gap:10px">' +
@@ -505,12 +512,11 @@ function rInsights(t,hasKey) {
     h+='<button onclick="clearKey()" style="width:100%;padding:8px;border:none;border-radius:8px;background:transparent;color:#484F58;font-size:11px;cursor:pointer;font-family:Montserrat,sans-serif">'+t.changeKey+'</button>';
   } else {
     h+='<div style="text-align:center;margin:20px 0"><div style="font-size:40px;margin-bottom:8px">&#x1F916;</div><h3 style="font-size:16px;font-weight:700;font-family:Montserrat,sans-serif;margin-bottom:6px">'+t.setupTitle+'</h3><p style="font-size:13px;color:#8B949E;margin-bottom:16px">'+t.setupDesc+'</p></div>';
-    h+='<input id="apiKeyInput" type="password" class="setup-input" placeholder="sk-ant-api03-..." style="margin-bottom:12px">';
+    h+='<input id="apiKeyInput" type="password" class="setup-input" placeholder="sk-ant-..." style="margin-bottom:12px">';
     h+='<button onclick="saveKey()" class="insight-btn" style="background:linear-gradient(135deg,#3BA676,#4A9BD9);margin-bottom:8px">'+t.save+'</button>';
     h+='<button onclick="skipSetup()" style="width:100%;padding:12px;border:none;border-radius:10px;background:#21262D;color:#8B949E;font-size:13px;font-family:Montserrat,sans-serif;cursor:pointer">'+t.skip+'</button>';
   }
 
-  // Insight text
   if(il) {
     h+='<div style="margin-top:16px;display:flex;flex-direction:column;gap:10px"><div class="shimmer" style="height:14px;width:85%"></div><div class="shimmer" style="height:14px;width:100%"></div><div class="shimmer" style="height:14px;width:65%"></div></div>';
   } else if(it) {
@@ -518,7 +524,6 @@ function rInsights(t,hasKey) {
     if(aitt) h+='<div style="margin-top:6px;font-size:10px;color:#484F58;text-align:right">'+t.lastChecked+': '+fta(aitt)+'</div>';
   }
 
-  // Week summary
   var days=l7();var wt={};var dwd=0;var i,j;
   for(i=0;i<CATS.length;i++)wt[CATS[i].id]=0;
   for(i=0;i<days.length;i++){var dt=gt(days[i]);var any=false;for(j=0;j<CATS.length;j++){wt[CATS[j].id]+=(dt[CATS[j].id]||0);if(dt[CATS[j].id]>0)any=true;}if(any)dwd++;}
