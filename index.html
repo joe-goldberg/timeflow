@@ -50,14 +50,13 @@ body{background:#0D1117;color:#E6EDF3;font-family:'Roboto',sans-serif;overflow-x
 
 // Safe emoji references (avoid ZWJ issues in template strings)
 var CATS = [
-  {id:"family", em:"👨‍👩‍👧‍👦", color:"#E8A838", target:3},
-  {id:"work",   em:"💼", color:"#7C6FAF", target:8},
-  {id:"self",   em:"🧘", color:"#3BA676", target:2},
-  {id:"partner",em:"💛", color:"#E0637C", target:2},
-  {id:"friends",em:"🤝", color:"#4A9BD9", target:1},
-  {id:"sleep",  em:"😴", color:"#6B7B8D", target:8}
+  {id:"family", em:"\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66", color:"#E8A838", target:3},
+  {id:"work",   em:"\uD83D\uDCBC", color:"#7C6FAF", target:8},
+  {id:"self",   em:"\uD83E\uDDD8", color:"#3BA676", target:2},
+  {id:"partner",em:"\uD83D\uDC9B", color:"#E0637C", target:2},
+  {id:"friends",em:"\uD83E\uDD1D", color:"#4A9BD9", target:1},
+  {id:"sleep",  em:"\uD83D\uDE34", color:"#6B7B8D", target:8}
 ];
-
 var L = {
   en:{
     family:"Family/Kids",work:"Work",self:"Self/Me-time",partner:"Partner",friends:"Friends",sleep:"Sleep",
@@ -224,7 +223,6 @@ function callAI(trigger) {
   fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":st.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-<<<<<<< HEAD
     body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:4000,thinking:{type:"adaptive"},messages:[{role:"user",content:prompt}]})
   }).then(function(res){return res.json();}).then(function(data){
     // FIX #2: extract hanya text blocks, skip thinking blocks
@@ -236,11 +234,6 @@ function callAI(trigger) {
       // FIX #3: handle kasus txt kosong (misal semua blocks adalah thinking)
       it = txt || (isID ? "Model tidak memberikan respons teks." : "Model returned no text response.");
     }
-=======
-    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:500,messages:[{role:"user",content:prompt}]}) 
-  }).then(function(res){return res.json();}).then(function(data){
-    if(data.content){var txt="";for(var i=0;i<data.content.length;i++)txt+=(data.content[i].text||"");it=txt;}
->>>>>>> 21ec632433c9b12834c67837134dcc978a75c23e
     else if(data.error){it="API Error: "+(data.error.message||JSON.stringify(data.error));}
     else{it=isID?"Tidak ada respons. ":"No response. "+JSON.stringify(data);}
     aitt=Date.now();st.aiSuggestion=it;st.aiSuggestionTime=aitt;il=false;svs();render();
