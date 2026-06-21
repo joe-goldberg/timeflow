@@ -219,11 +219,11 @@ function callAI(trigger) {
     ? "Kamu AI life coach personal. Analisis data tracking waktu pengguna (punya anak kecil). Max 3 poin, singkat, actionable, pakai emoji. Bahasa Indonesia santai. Max 120 kata. Tanpa heading markdown.\n\nHARI INI (jam "+hr+":00):\n"+todayStr+"\n7 HARI:\n"+weekStr
     : "You are a personal AI life coach. Analyze time tracking data (user has young kids). Max 3 points, short, actionable, use emoji. Warm tone. Max 120 words. No markdown headings.\n\nTODAY ("+hr+":00):\n"+todayStr+"\n7 DAYS:\n"+weekStr;
 
-  // FIX #1: max_tokens naik ke 4000 + tambah adaptive thinking agar Sonnet 4.6 bisa berpikir dengan benar
+  // FIX #1: max_tokens naik ke 4000 untuk Sonnet 4.6
   fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":st.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:4000,thinking:{type:"adaptive"},messages:[{role:"user",content:prompt}]})
+    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:4000,messages:[{role:"user",content:prompt}]})
   }).then(function(res){return res.json();}).then(function(data){
     // FIX #2: extract hanya text blocks, skip thinking blocks
     if(data.content){
