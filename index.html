@@ -27,7 +27,7 @@ body{background:#0D1117;color:#E6EDF3;font-family:'Roboto',sans-serif;overflow-x
 .cat-btn:active{transform:scale(.95)!important}
 .hdr-btn{transition:all .2s;cursor:pointer;border:none}
 .tab-bar{display:flex;gap:2px;overflow-x:auto}
-.tab-btn{flex:1;padding:7px 0;border:none;border-radius:8px;font-size:10px;font-weight:600;font-family:'Montserrat',sans-serif;cursor:pointer;transition:all .2s;min-width:50px;background:transparent;color:#8B949E}
+.tab-btn{flex:1;padding:7px 0;border:none;border-radius:8px;font-size:10px;font-weight:600;font-family:'Montserrat',sans-serif;cursor:pointer;transition:all .2s;min-width:44px;background:transparent;color:#8B949E}
 .tab-btn.active{background:#21262D;color:#E6EDF3}
 .log-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #161B22}
 .edit-input{padding:10px 12px;background:#0D1117;border:1px solid #30363D;border-radius:8px;color:#E6EDF3;font-size:15px;font-family:'Roboto',sans-serif;outline:none;width:100%;text-align:center;min-height:44px}
@@ -50,17 +50,18 @@ body{background:#0D1117;color:#E6EDF3;font-family:'Roboto',sans-serif;overflow-x
 
 // Safe emoji references (avoid ZWJ issues in template strings)
 var CATS = [
-  {id:"family", em:"\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66", color:"#E8A838", target:3},
-  {id:"work",   em:"\uD83D\uDCBC", color:"#7C6FAF", target:8},
-  {id:"self",   em:"\uD83E\uDDD8", color:"#3BA676", target:2},
-  {id:"partner",em:"\uD83D\uDC9B", color:"#E0637C", target:2},
-  {id:"friends",em:"\uD83E\uDD1D", color:"#4A9BD9", target:1},
-  {id:"sleep",  em:"\uD83D\uDE34", color:"#6B7B8D", target:8}
+  {id:"family", em:"👨‍👩‍👧‍👦", color:"#E8A838", target:3},
+  {id:"work",   em:"💼", color:"#7C6FAF", target:8},
+  {id:"self",   em:"🧘", color:"#3BA676", target:2},
+  {id:"partner",em:"💛", color:"#E0637C", target:2},
+  {id:"friends",em:"🤝", color:"#4A9BD9", target:1},
+  {id:"sleep",  em:"😴", color:"#6B7B8D", target:8}
 ];
+
 var L = {
   en:{
     family:"Family/Kids",work:"Work",self:"Self/Me-time",partner:"Partner",friends:"Friends",sleep:"Sleep",
-    track:"Track",today:"Today",week:"Week",log:"Log",insights:"AI",
+    track:"Track",today:"Today",week:"Week",trend:"Trend",log:"Log",insights:"AI",
     trackedToday:"tracked today",tapStart:"Tap to start. Tap again to stop. Tap another to switch.",
     target:"target",todayBreak:"Today's Breakdown",startTracking:"Start tracking to see breakdown",
     weekTrend:"7-Day Trend",trackDays:"Track a few days to see trends",todayVsTarget:"Today vs Target",
@@ -77,7 +78,7 @@ var L = {
   },
   id:{
     family:"Keluarga/Anak",work:"Kerja",self:"Waktu Sendiri",partner:"Pasangan",friends:"Teman",sleep:"Tidur",
-    track:"Lacak",today:"Hari Ini",week:"Minggu",log:"Catatan",insights:"AI",
+    track:"Lacak",today:"Hari Ini",week:"Minggu",trend:"Tren",log:"Catatan",insights:"AI",
     trackedToday:"terlacak hari ini",tapStart:"Ketuk untuk mulai. Ketuk lagi untuk stop. Ketuk lain untuk ganti.",
     target:"target",todayBreak:"Ringkasan Hari Ini",startTracking:"Mulai tracking untuk lihat ringkasan",
     weekTrend:"Tren 7 Hari",trackDays:"Tracking beberapa hari untuk lihat tren",todayVsTarget:"Hari Ini vs Target",
@@ -99,7 +100,7 @@ var NUDGE_MS = 7200000;
 var AI_CD = 1800000;
 var PAT_INT = 60000;
 
-var st, cv, il, it, ait, aitt, psd, ee, chts;
+var st, cv, il, it, ait, aitt, psd, ee, chts, trf;
 
 function init() {
   st = lds();
@@ -110,6 +111,7 @@ function init() {
   psd = false;
   ee = null;
   chts = {};
+  trf = {period:"30", catId:"all"};
 }
 
 function lds() {
@@ -219,26 +221,22 @@ function callAI(trigger) {
     ? "Kamu AI life coach personal. Analisis data tracking waktu pengguna (punya anak kecil). Max 3 poin, singkat, actionable, pakai emoji. Bahasa Indonesia santai. Max 120 kata. Tanpa heading markdown.\n\nHARI INI (jam "+hr+":00):\n"+todayStr+"\n7 HARI:\n"+weekStr
     : "You are a personal AI life coach. Analyze time tracking data (user has young kids). Max 3 points, short, actionable, use emoji. Warm tone. Max 120 words. No markdown headings.\n\nTODAY ("+hr+":00):\n"+todayStr+"\n7 DAYS:\n"+weekStr;
 
-  // FIX #1: max_tokens naik ke 4000 untuk Sonnet 4.6
   fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":st.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
     body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:4000,messages:[{role:"user",content:prompt}]})
   }).then(function(res){return res.json();}).then(function(data){
-    // FIX #2: extract hanya text blocks, skip thinking blocks
     if(data.content){
       var txt="";
-      for(var i=0;i<data.content.length;i++){
-        if(data.content[i].type==="text") txt+=(data.content[i].text||"");
+      for(var k=0;k<data.content.length;k++){
+        if(data.content[k].type==="text") txt+=(data.content[k].text||"");
       }
-      // FIX #3: handle kasus txt kosong (misal semua blocks adalah thinking)
-      it = txt || (isID ? "Model tidak memberikan respons teks." : "Model returned no text response.");
+      it = txt || (isID?"Model tidak memberikan respons teks.":"Model returned no text response.");
     }
     else if(data.error){it="API Error: "+(data.error.message||JSON.stringify(data.error));}
-    else{it=isID?"Tidak ada respons. ":"No response. "+JSON.stringify(data);}
+    else{it=(isID?"Tidak ada respons. ":"No response. ")+JSON.stringify(data);}
     aitt=Date.now();st.aiSuggestion=it;st.aiSuggestionTime=aitt;il=false;svs();render();
   }).catch(function(e){
-    // FIX #4: tampilkan error asli agar bisa di-debug
     it="Network/CORS Error: "+(e.message||e.toString());
     il=false;svs();render();
   });
@@ -249,7 +247,7 @@ function getAlerts() {
   var today=td(),tot=gt(today);
   var totalT=0; var i; for(i=0;i<CATS.length;i++)totalT+=tot[CATS[i].id]||0;
   if(totalT<1800) return [];
-  var wH=tot.work/3600, sH=tot.sleep/3600, fH=tot.family/3600, meH=tot.self/3600, pH=tot.partner/3600;
+  var wH=tot.work/3600, sH=tot.sleep/3600, fH=tot.family/3600, meH=tot.self/3600;
   var hr=new Date().getHours(); var a=[]; var isID=st.lang==="id";
   if(isID){
     if(wH>9)a.push({msg:"Sudah kerja >9 jam. Istirahat!",color:"#E0637C"});
@@ -311,10 +309,11 @@ function render() {
   if(cv==="tracker") viewH = rTracker(totals,t);
   else if(cv==="daily") viewH = rDaily(totals,totalSec,t);
   else if(cv==="weekly") viewH = rWeekly(t);
+  else if(cv==="trend") viewH = rTrend(t);
   else if(cv==="log") viewH = rLog(today,t);
   else if(cv==="insights") viewH = rInsights(t,hasKey);
 
-  // Notif button - always show, check support on tap
+  // Notif button
   var nBtn = '<button onclick="togNotif()" class="hdr-btn" style="padding:6px 10px;border-radius:20px;border:1px solid #30363D;background:#161B22;color:#8B949E;font-size:12px;font-weight:700;min-width:36px;min-height:32px;font-family:Montserrat,sans-serif">N</button>';
   try {
     if(typeof Notification !== "undefined" && Notification.permission === "granted") {
@@ -327,14 +326,13 @@ function render() {
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
         '<div><h1 style="margin:0;font-size:22px;font-weight:800;font-family:Montserrat,sans-serif;color:#3BA676">TimeFlow</h1><p style="margin:2px 0 0;font-size:11px;color:#8B949E">'+dateStr+'</p></div>' +
         '<div style="display:flex;align-items:center;gap:8px">' +
-          '<button onclick="alert(Object.keys(localStorage).join(\', \'))" class="hdr-btn" style="padding:4px 9px;border-radius:20px;border:1px solid #30363D;background:#161B22;color:#F85149;font-size:11px;font-weight:600;font-family:Montserrat,sans-serif">DBG</button>' +
           '<button onclick="togLang()" class="hdr-btn" style="padding:4px 9px;border-radius:20px;border:1px solid #30363D;background:#161B22;color:#C9D1D9;font-size:11px;font-weight:600;font-family:Montserrat,sans-serif">'+(st.lang==="en"?"ID":"EN")+'</button>' +
           nBtn +
           '<div style="text-align:right"><div style="font-size:18px;font-weight:700;font-family:Montserrat,sans-serif">'+fd(totalSec)+'</div><div style="font-size:9px;color:#8B949E;text-transform:uppercase;letter-spacing:1px">'+t.trackedToday+'</div></div>' +
         '</div>' +
       '</div>' +
       '<div class="tab-bar">' +
-        tBtn("tracker",t.track) + tBtn("daily",t.today) + tBtn("weekly",t.week) + tBtn("log",t.log) + tBtn("insights",t.insights+(hasKey?" *":"")) +
+        tBtn("tracker",t.track) + tBtn("daily",t.today) + tBtn("weekly",t.week) + tBtn("trend",t.trend) + tBtn("log",t.log) + tBtn("insights",t.insights+(hasKey?" *":"")) +
       '</div>' +
     '</div>' +
     alertH + nudge + aiB +
@@ -444,6 +442,162 @@ function rWeekly(t) {
   return h;
 }
 
+// ─── Trend ───
+function setTrf(key,val){trf[key]=val;render();}
+
+function trDates(){
+  var now=new Date(),start=new Date();
+  if(trf.period==="7"){start.setDate(now.getDate()-6);}
+  else if(trf.period==="30"){start.setDate(now.getDate()-29);}
+  else if(trf.period==="90"){start.setDate(now.getDate()-89);}
+  else{
+    var k=Object.keys(st.days||{}).sort();
+    if(k.length){start=new Date(k[0]+"T12:00:00");}
+    else{start.setDate(now.getDate()-29);}
+  }
+  var d=[],cur=new Date(start);
+  now.setHours(23,59,59,999);
+  while(cur<=now){d.push(cur.toISOString().slice(0,10));cur.setDate(cur.getDate()+1);}
+  return d;
+}
+
+function trGroups(dates){
+  if(dates.length<=31) return dates.map(function(d){return{label:d.slice(5),dates:[d]};});
+  var groups=[];
+  for(var i=0;i<dates.length;i++){
+    var dow=new Date(dates[i]+"T12:00:00").getDay();
+    if(groups.length===0||dow===1){groups.push({label:dates[i].slice(5),dates:[]});}
+    groups[groups.length-1].dates.push(dates[i]);
+  }
+  return groups;
+}
+
+function rTrend(t){
+  var isID=st.lang==="id";
+  var h='<div class="fade-in">';
+  var periods=[["7",isID?"7H":"7D"],["30",isID?"30H":"30D"],["90",isID?"3B":"3M"],["all",isID?"Semua":"All"]];
+  h+='<div style="display:flex;gap:6px;margin-bottom:12px">';
+  for(var p=0;p<periods.length;p++){
+    var a=trf.period===periods[p][0];
+    h+='<button onclick="setTrf(\'period\',\''+periods[p][0]+'\')" style="flex:1;padding:7px 4px;border:1px solid '+(a?'#3BA676':'#30363D')+';border-radius:20px;background:'+(a?'#14261E':'transparent')+';color:'+(a?'#3BA676':'#8B949E')+';font-size:11px;font-weight:700;font-family:Montserrat,sans-serif;cursor:pointer">'+periods[p][1]+'</button>';
+  }
+  h+='</div>';
+  h+='<div style="display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px">';
+  var allA=trf.catId==="all";
+  h+='<button onclick="setTrf(\'catId\',\'all\')" style="padding:5px 12px;border:1px solid '+(allA?'#3BA676':'#30363D')+';border-radius:20px;background:'+(allA?'#3BA67622':'transparent')+';color:'+(allA?'#3BA676':'#8B949E')+';font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:Montserrat,sans-serif">All</button>';
+  for(var ci=0;ci<CATS.length;ci++){
+    var c=CATS[ci],ca=trf.catId===c.id;
+    h+='<button onclick="setTrf(\'catId\',\''+c.id+'\')" style="padding:5px 10px;border:1px solid '+(ca?c.color:'#30363D')+';border-radius:20px;background:'+(ca?c.color+'22':'transparent')+';color:'+(ca?c.color:'#8B949E')+';font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:Montserrat,sans-serif">'+c.em+' '+cl(c.id)+'</button>';
+  }
+  h+='</div>';
+  var dates=trDates();
+  var groups=trGroups(dates);
+  if(trf.catId==="all"){h+=rTrendAll(groups,dates,isID);}
+  else{
+    var sel=null;
+    for(var xi=0;xi<CATS.length;xi++){if(CATS[xi].id===trf.catId){sel=CATS[xi];break;}}
+    if(sel)h+=rTrendCat(groups,dates,sel,isID);
+  }
+  h+='</div>';
+  return h;
+}
+
+function rTrendAll(groups,allDates,isID){
+  var h='';
+  var gData=[],maxTotal=0;
+  for(var g=0;g<groups.length;g++){
+    var totals={},total=0;
+    for(var ci=0;ci<CATS.length;ci++)totals[CATS[ci].id]=0;
+    for(var di=0;di<groups[g].dates.length;di++){
+      var dt=gt(groups[g].dates[di]);
+      for(var ci2=0;ci2<CATS.length;ci2++)totals[CATS[ci2].id]+=(dt[CATS[ci2].id]||0)/3600;
+    }
+    for(var ci3=0;ci3<CATS.length;ci3++)total+=totals[CATS[ci3].id];
+    if(total>maxTotal)maxTotal=total;
+    gData.push({totals:totals,total:total,dates:groups[g].dates,label:groups[g].label});
+  }
+  if(maxTotal<0.1)maxTotal=1;
+  var isWeekly=groups.length>0&&groups[0].dates.length>1;
+  h+='<h3 style="font-size:11px;font-weight:700;color:#8B949E;margin-bottom:8px;font-family:Montserrat,sans-serif;text-transform:uppercase;letter-spacing:.5px">'+(isID?"Semua Aktivitas":"All Activities")+(isWeekly?' ('+(isID?"per minggu":"weekly")+')':'')+'</h3>';
+  h+='<div style="overflow-x:auto;margin-bottom:8px"><div style="display:flex;align-items:flex-end;gap:2px;height:100px;min-width:'+(gData.length*20)+'px">';
+  for(var g2=0;g2<gData.length;g2++){
+    var gd=gData[g2];
+    var bh=Math.max(gd.total>0?3:0,(gd.total/maxTotal)*96);
+    h+='<div style="flex:1;min-width:14px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center">';
+    h+='<div style="width:90%;height:'+bh+'%;border-radius:2px 2px 0 0;overflow:hidden;display:flex;flex-direction:column-reverse">';
+    for(var ci4=0;ci4<CATS.length;ci4++){
+      var seg=gd.total>0?(gd.totals[CATS[ci4].id]/gd.total)*100:0;
+      if(seg>0.5)h+='<div style="width:100%;height:'+seg.toFixed(1)+'%;background:'+CATS[ci4].color+'"></div>';
+    }
+    h+='</div></div>';
+  }
+  h+='</div></div>';
+  h+='<div style="display:flex;justify-content:space-between;margin-bottom:12px"><span style="font-size:9px;color:#484F58">'+(gData.length?gData[0].label:'')+'</span><span style="font-size:9px;color:#484F58">'+(gData.length>1?gData[gData.length-1].label:'')+'</span></div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">';
+  for(var ci5=0;ci5<CATS.length;ci5++){h+='<div style="display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;border-radius:2px;background:'+CATS[ci5].color+'"></div><span style="font-size:10px;color:#8B949E">'+cl(CATS[ci5].id)+'</span></div>';}
+  h+='</div>';
+  h+='<h3 style="font-size:11px;font-weight:700;color:#8B949E;margin-bottom:10px;font-family:Montserrat,sans-serif;text-transform:uppercase;letter-spacing:.5px">'+(isID?"Ringkasan per Kategori":"Summary by Category")+'</h3>';
+  h+='<div style="display:flex;flex-direction:column;gap:10px">';
+  var dN=allDates.length;
+  for(var ci6=0;ci6<CATS.length;ci6++){
+    var c=CATS[ci6],totalH=0,daysOn=0;
+    for(var di2=0;di2<allDates.length;di2++){var dh=(gt(allDates[di2])[c.id]||0)/3600;totalH+=dh;if(dh>=c.target*0.85)daysOn++;}
+    var avgH=dN>0?totalH/dN:0;
+    var tPct=c.target>0?Math.min(100,(avgH/c.target)*100):0;
+    h+='<div style="display:flex;align-items:center;gap:10px">';
+    h+='<span style="font-size:18px;width:26px;text-align:center">'+c.em+'</span>';
+    h+='<div style="flex:1"><div style="font-size:12px;color:#C9D1D9;margin-bottom:4px">'+cl(c.id)+'</div><div style="height:6px;background:#21262D;border-radius:3px;overflow:hidden"><div style="width:'+tPct+'%;height:100%;background:'+c.color+';border-radius:3px"></div></div></div>';
+    h+='<div style="text-align:right;min-width:72px"><div style="font-size:13px;font-weight:700;color:'+c.color+';font-family:Montserrat,sans-serif">'+totalH.toFixed(1)+'h</div><div style="font-size:10px;color:#8B949E">'+avgH.toFixed(1)+'h/d</div></div>';
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
+}
+
+function rTrendCat(groups,allDates,cat,isID){
+  var h='';
+  var isWeekly=groups.length>0&&groups[0].dates.length>1;
+  var targetH=isWeekly?cat.target*7:cat.target;
+  var gData=[],maxH=targetH;
+  for(var g=0;g<groups.length;g++){
+    var hrs=0;
+    for(var di=0;di<groups[g].dates.length;di++)hrs+=(gt(groups[g].dates[di])[cat.id]||0)/3600;
+    if(hrs>maxH)maxH=hrs;
+    gData.push({hrs:hrs,dates:groups[g].dates,label:groups[g].label});
+  }
+  if(maxH<0.1)maxH=Math.max(targetH,1);
+  h+='<h3 style="font-size:15px;font-weight:700;margin-bottom:12px;font-family:Montserrat,sans-serif;color:'+cat.color+'">'+cat.em+' '+cl(cat.id)+(isWeekly?' <span style="font-size:11px;color:#8B949E">(per minggu)</span>':'')+'</h3>';
+  h+='<div style="overflow-x:auto;margin-bottom:4px"><div style="display:flex;align-items:flex-end;gap:3px;height:130px;min-width:'+(Math.max(gData.length*22,200))+'px;position:relative">';
+  var tLinePct=(targetH/maxH)*100;
+  h+='<div style="position:absolute;left:0;right:0;bottom:'+tLinePct.toFixed(1)+'%;border-top:1px dashed '+cat.color+'55;pointer-events:none;z-index:1"></div>';
+  for(var g2=0;g2<gData.length;g2++){
+    var gd=gData[g2];
+    var bh=Math.max(gd.hrs>0?3:0,(gd.hrs/maxH)*96);
+    var onTarget=gd.hrs>=targetH*0.85;
+    var isToday=gd.dates.length===1&&gd.dates[0]===td();
+    h+='<div style="flex:1;min-width:18px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center">';
+    h+='<div style="width:75%;height:'+bh+'%;background:'+(onTarget?cat.color:cat.color+'55')+';border-radius:3px 3px 0 0;'+(isToday?'outline:2px solid '+cat.color+';outline-offset:1px':'')+'" title="'+gd.hrs.toFixed(1)+'h"></div>';
+    h+='</div>';
+  }
+  h+='</div></div>';
+  h+='<div style="display:flex;justify-content:space-between;margin-bottom:14px"><span style="font-size:9px;color:#484F58">'+(gData.length?gData[0].label:'')+'</span><span style="font-size:9px;color:#484F58">'+(gData.length>1?gData[gData.length-1].label:'')+'</span></div>';
+  var totalH=0,bestH=0,bestD="",daysOn=0,dN=allDates.length;
+  for(var di2=0;di2<allDates.length;di2++){
+    var dh=(gt(allDates[di2])[cat.id]||0)/3600;
+    totalH+=dh;
+    if(dh>bestH){bestH=dh;bestD=allDates[di2];}
+    if(dh>=cat.target*0.85)daysOn++;
+  }
+  var avgH=dN>0?totalH/dN:0;
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  h+='<div style="padding:12px;background:#161B22;border-radius:10px;border:1px solid #21262D"><div style="font-size:9px;color:#8B949E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Total</div><div style="font-size:22px;font-weight:700;font-family:Montserrat,sans-serif;color:'+cat.color+'">'+totalH.toFixed(1)+'<span style="font-size:11px">h</span></div></div>';
+  h+='<div style="padding:12px;background:#161B22;border-radius:10px;border:1px solid #21262D"><div style="font-size:9px;color:#8B949E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'+(isID?"Rata-rata":"Avg/day")+'</div><div style="font-size:22px;font-weight:700;font-family:Montserrat,sans-serif;color:'+cat.color+'">'+avgH.toFixed(1)+'<span style="font-size:11px">h</span></div></div>';
+  h+='<div style="padding:12px;background:#161B22;border-radius:10px;border:1px solid #21262D"><div style="font-size:9px;color:#8B949E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">On Target</div><div style="font-size:22px;font-weight:700;font-family:Montserrat,sans-serif;color:'+(daysOn/Math.max(dN,1)>=0.5?'#3BA676':'#E8A838')+'">'+daysOn+'<span style="font-size:11px">/'+dN+'d</span></div></div>';
+  h+='<div style="padding:12px;background:#161B22;border-radius:10px;border:1px solid #21262D"><div style="font-size:9px;color:#8B949E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'+(isID?"Terbaik":"Best day")+'</div><div style="font-size:16px;font-weight:700;font-family:Montserrat,sans-serif;color:'+cat.color+'">'+(bestD?bestD.slice(5):'&mdash;')+'</div>'+(bestD?'<div style="font-size:10px;color:#8B949E">'+bestH.toFixed(1)+'h</div>':'')+'</div>';
+  h+='</div>';
+  return h;
+}
+
 function rLog(today,t) {
   var h = '<div class="fade-in"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="font-size:16px;font-weight:700;margin:0;font-family:Montserrat,sans-serif">'+t.activityLog+'</h2><button onclick="clearAll()" class="hdr-btn" style="padding:5px 12px;background:#21262D;border:1px solid #30363D;border-radius:6px;color:#F85149;font-size:11px;font-family:Montserrat,sans-serif;font-weight:600">'+t.clearAll+'</button></div>';
 
@@ -470,27 +624,11 @@ function rLog(today,t) {
       var cat=null; for(var ci=0;ci<CATS.length;ci++){if(CATS[ci].id===log.category){cat=CATS[ci];break;}}
       if(!cat) continue;
       var isEd = ee && ee.d===ds && ee.i===li;
-
       if(isEd) {
         var opts="";for(var oi=0;oi<CATS.length;oi++){opts+='<option value="'+CATS[oi].id+'"'+(CATS[oi].id===log.category?' selected':'')+'>'+CATS[oi].em+' '+cl(CATS[oi].id)+'</option>';}
-        h+='<div class="edit-panel">' +
-          '<div style="display:flex;flex-direction:column;gap:10px">' +
-            '<div style="display:flex;align-items:center;gap:10px"><label style="font-size:11px;color:#8B949E;min-width:50px">'+t.category+'</label><select id="edit-category" class="cat-select" style="flex:1">'+opts+'</select></div>' +
-            '<div style="display:flex;align-items:center;gap:10px"><label style="font-size:11px;color:#8B949E;min-width:50px">'+t.startTime+'</label><input id="edit-start" type="time" class="edit-input" style="flex:1" value="'+fti(log.start)+'"></div>' +
-            '<div style="display:flex;align-items:center;gap:10px"><label style="font-size:11px;color:#8B949E;min-width:50px">'+t.endTime+'</label><input id="edit-end" type="time" class="edit-input" style="flex:1" value="'+fti(log.end)+'"></div>' +
-          '</div>' +
-          '<div style="display:flex;gap:8px;margin-top:14px">' +
-            '<button onclick="saveEd()" class="edit-btn" style="flex:1;background:#3BA676;color:#fff">'+t.saveEdit+'</button>' +
-            '<button onclick="cancelEd()" class="edit-btn" style="flex:1;background:#21262D;color:#8B949E">'+t.cancelEdit+'</button>' +
-            '<button onclick="delEntry()" class="edit-btn" style="background:#21262D;color:#F85149;min-width:44px">X</button>' +
-          '</div></div>';
+        h+='<div class="edit-panel"><div style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;align-items:center;gap:10px"><label style="font-size:11px;color:#8B949E;min-width:50px">'+t.category+'</label><select id="edit-category" class="cat-select" style="flex:1">'+opts+'</select></div><div style="display:flex;align-items:center;gap:10px"><label style="font-size:11px;color:#8B949E;min-width:50px">'+t.startTime+'</label><input id="edit-start" type="time" class="edit-input" style="flex:1" value="'+fti(log.start)+'"></div><div style="display:flex;align-items:center;gap:10px"><label style="font-size:11px;color:#8B949E;min-width:50px">'+t.endTime+'</label><input id="edit-end" type="time" class="edit-input" style="flex:1" value="'+fti(log.end)+'"></div></div><div style="display:flex;gap:8px;margin-top:14px"><button onclick="saveEd()" class="edit-btn" style="flex:1;background:#3BA676;color:#fff">'+t.saveEdit+'</button><button onclick="cancelEd()" class="edit-btn" style="flex:1;background:#21262D;color:#8B949E">'+t.cancelEdit+'</button><button onclick="delEntry()" class="edit-btn" style="background:#21262D;color:#F85149;min-width:44px">X</button></div></div>';
       } else {
-        h+='<div class="log-row">' +
-          '<div style="width:32px;height:32px;border-radius:8px;background:'+cat.color+'18;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">'+cat.em+'</div>' +
-          '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;color:#C9D1D9;font-family:Montserrat,sans-serif">'+cl(cat.id)+'</div><div style="font-size:11px;color:#8B949E">'+ft(log.start)+' - '+ft(log.end)+'</div></div>' +
-          '<div style="font-size:13px;font-weight:700;font-family:Montserrat,sans-serif;color:'+cat.color+'">'+fd(log.duration)+'</div>' +
-          '<button onclick="startEd(\''+ds+'\','+li+')" class="edit-btn" style="background:#21262D;color:#8B949E;font-size:14px;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center">Ed</button>' +
-        '</div>';
+        h+='<div class="log-row"><div style="width:32px;height:32px;border-radius:8px;background:'+cat.color+'18;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">'+cat.em+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;color:#C9D1D9;font-family:Montserrat,sans-serif">'+cl(cat.id)+'</div><div style="font-size:11px;color:#8B949E">'+ft(log.start)+' - '+ft(log.end)+'</div></div><div style="font-size:13px;font-weight:700;font-family:Montserrat,sans-serif;color:'+cat.color+'">'+fd(log.duration)+'</div><button onclick="startEd(\''+ds+'\','+li+')" class="edit-btn" style="background:#21262D;color:#8B949E;font-size:14px;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center">Ed</button></div>';
       }
     }
     h+='</div>';
@@ -505,24 +643,21 @@ function rInsights(t,hasKey) {
   var h='<div class="fade-in">';
   h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><h2 style="font-size:16px;font-weight:700;margin:0;font-family:Montserrat,sans-serif">'+t.aiInsights+'</h2><div style="font-size:11px;color:'+statusC+'">'+statusT+'</div></div>';
   h+='<p style="font-size:12px;color:#8B949E;margin:0 0 14px">'+t.insightsDesc+'</p>';
-
   if(hasKey) {
     h+='<button onclick="callAI(\'manual\')" '+(il?'disabled':'')+' class="insight-btn" style="background:'+(il?'#21262D':'linear-gradient(135deg,#3BA676,#4A9BD9)')+';cursor:'+(il?'wait':'pointer')+';opacity:'+(il?.7:1)+';margin-bottom:4px">'+(il?t.analyzing:t.getInsights)+'</button>';
     h+='<button onclick="clearKey()" style="width:100%;padding:8px;border:none;border-radius:8px;background:transparent;color:#484F58;font-size:11px;cursor:pointer;font-family:Montserrat,sans-serif">'+t.changeKey+'</button>';
   } else {
     h+='<div style="text-align:center;margin:20px 0"><div style="font-size:40px;margin-bottom:8px">&#x1F916;</div><h3 style="font-size:16px;font-weight:700;font-family:Montserrat,sans-serif;margin-bottom:6px">'+t.setupTitle+'</h3><p style="font-size:13px;color:#8B949E;margin-bottom:16px">'+t.setupDesc+'</p></div>';
-    h+='<input id="apiKeyInput" type="password" class="setup-input" placeholder="sk-ant-..." style="margin-bottom:12px">';
+    h+='<input id="apiKeyInput" type="password" class="setup-input" placeholder="sk-ant-api03-..." style="margin-bottom:12px">';
     h+='<button onclick="saveKey()" class="insight-btn" style="background:linear-gradient(135deg,#3BA676,#4A9BD9);margin-bottom:8px">'+t.save+'</button>';
     h+='<button onclick="skipSetup()" style="width:100%;padding:12px;border:none;border-radius:10px;background:#21262D;color:#8B949E;font-size:13px;font-family:Montserrat,sans-serif;cursor:pointer">'+t.skip+'</button>';
   }
-
   if(il) {
     h+='<div style="margin-top:16px;display:flex;flex-direction:column;gap:10px"><div class="shimmer" style="height:14px;width:85%"></div><div class="shimmer" style="height:14px;width:100%"></div><div class="shimmer" style="height:14px;width:65%"></div></div>';
   } else if(it) {
     h+='<div class="fade-in" style="margin-top:16px;padding:16px 18px;background:#161B22cc;border:1px solid #30363D;border-radius:14px;font-size:13.5px;line-height:1.7;color:#C9D1D9;white-space:pre-wrap">'+it+'</div>';
     if(aitt) h+='<div style="margin-top:6px;font-size:10px;color:#484F58;text-align:right">'+t.lastChecked+': '+fta(aitt)+'</div>';
   }
-
   var days=l7();var wt={};var dwd=0;var i,j;
   for(i=0;i<CATS.length;i++)wt[CATS[i].id]=0;
   for(i=0;i<days.length;i++){var dt=gt(days[i]);var any=false;for(j=0;j<CATS.length;j++){wt[CATS[j].id]+=(dt[CATS[j].id]||0);if(dt[CATS[j].id]>0)any=true;}if(any)dwd++;}
@@ -540,16 +675,14 @@ function rInsights(t,hasKey) {
   return h;
 }
 
-// ─── Service Worker ───
+// Service Worker
 try { if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function(){}); } catch(e){}
 
-// ─── Error Handler ───
 window.onerror = function(msg,url,line,col,err) {
   var d=document.getElementById("app");
   if(d) d.innerHTML='<div style="padding:40px;color:#F85149;font-family:monospace;font-size:14px;word-break:break-all"><h2 style="color:#E6EDF3;margin-bottom:12px">Error</h2><p>'+msg+'</p><p>Line: '+line+'</p><p>'+(err&&err.stack?err.stack:'')+'</p></div>';
 };
 
-// ─── Boot ───
 try {
   init();
   render();
