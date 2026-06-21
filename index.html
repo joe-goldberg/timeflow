@@ -224,6 +224,7 @@ function callAI(trigger) {
   fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":st.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+<<<<<<< HEAD
     body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:4000,thinking:{type:"adaptive"},messages:[{role:"user",content:prompt}]})
   }).then(function(res){return res.json();}).then(function(data){
     // FIX #2: extract hanya text blocks, skip thinking blocks
@@ -235,6 +236,11 @@ function callAI(trigger) {
       // FIX #3: handle kasus txt kosong (misal semua blocks adalah thinking)
       it = txt || (isID ? "Model tidak memberikan respons teks." : "Model returned no text response.");
     }
+=======
+    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:500,messages:[{role:"user",content:prompt}]}) 
+  }).then(function(res){return res.json();}).then(function(data){
+    if(data.content){var txt="";for(var i=0;i<data.content.length;i++)txt+=(data.content[i].text||"");it=txt;}
+>>>>>>> 21ec632433c9b12834c67837134dcc978a75c23e
     else if(data.error){it="API Error: "+(data.error.message||JSON.stringify(data.error));}
     else{it=isID?"Tidak ada respons. ":"No response. "+JSON.stringify(data);}
     aitt=Date.now();st.aiSuggestion=it;st.aiSuggestionTime=aitt;il=false;svs();render();
